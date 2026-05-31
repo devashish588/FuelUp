@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF7A00"/>
+      <stop offset="100%" stop-color="#FFB800"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+  <!-- Flame -->
+  <path d="M16,4 C19.5,4 23,7.5 23,12.5 C23,18 19.5,23 16,27 C12.5,23 9,18 9,12.5 C9,7.5 12.5,4 16,4Z" fill="#1A1A1A" opacity="0.9"/>
+  <!-- Dumbbell -->
+  <g fill="#FFB800">
+    <rect x="12" y="13" width="2" height="6" rx="0.5"/>
+    <rect x="18" y="13" width="2" height="6" rx="0.5"/>
+    <rect x="13.5" y="14.5" width="5" height="3" rx="0.5"/>
+  </g>
+</svg>

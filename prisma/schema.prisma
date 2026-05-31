@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  clerkId       String   @unique @map("clerk_id")
+  email         String   @unique
+  name          String?
+  gender        String?
+  dateOfBirth   DateTime? @map("date_of_birth")
+  activityLevel String   @default("moderate") @map("activity_level")
+  goal          String   @default("recomp")
+  dailyCalorieTarget Int @default(2000) @map("daily_calorie_target")
+  proteinTargetG     Int @default(150) @map("protein_target_g")
+  carbsTargetG       Int @default(200) @map("carbs_target_g")
+  fatTargetG         Int @default(65) @map("fat_target_g")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  foodItems     FoodItem[]
+  foodLogs      FoodLog[]
+  workouts      Workout[]
+  metrics       BodyMetric[]
+  habits        Habit[]
+  habitLogs     HabitLog[]
+
+  @@map("users")
+}
+
+model FoodItem {
+  id                  String   @id @default(cuid())
+  userId              String?  @map("user_id")
+  name                String
+  brand               String?
+  servingSize         Float    @default(1) @map("serving_size")
+  servingUnit         String   @default("serving") @map("serving_unit")
+  caloriesPerServing  Float    @map("calories_per_serving")
+  proteinG            Float    @default(0) @map("protein_g")
+  carbsG              Float    @default(0) @map("carbs_g")
+  fatG                Float    @default(0) @map("fat_g")
+  fiberG              Float    @default(0) @map("fiber_g")
+  barcode             String?
+  isCustom            Boolean  @default(true) @map("is_custom")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  user                User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodLogs            FoodLog[]
+
+  @@map("food_items")
+}
+
+model FoodLog {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  foodItemId  String   @map("food_item_id")
+  date        String
+  mealType    String   @map("meal_type")
+  servings    Float    @default(1)
+  calories    Float
+  proteinG    Float    @default(0) @map("protein_g")
+  carbsG      Float    @default(0) @map("carbs_g")
+  fatG        Float    @default(0) @map("fat_g")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodItem    FoodItem @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
+
+  @@map("food_logs")
+}
+
+model Workout {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  name            String
+  date            String
+  startTime       String   @map("start_time")
+  endTime         String?  @map("end_time")
+  durationMinutes Int?     @map("duration_minutes")
+  caloriesBurned  Int?     @map("calories_burned")
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises       WorkoutExercise[]
+
+  @@map("workouts")
+}
+
+model WorkoutExercise {
+  id          String   @id @default(cuid())
+  workoutId   String   @map("workout_id")
+  exerciseId  String   @map("exercise_id")
+  sortOrder   Int      @default(0) @map("sort_order")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workout     Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  sets        ExerciseSet[]
+
+  @@map("workout_exercises")
+}
+
+model ExerciseSet {
+  id                  String   @id @default(cuid())
+  workoutExerciseId   String   @map("workout_exercise_id")
+  setNumber           Int      @map("set_number")
+  reps                Int?
+  weightKg            Float?   @map("weight_kg")
+  durationSeconds     Int?     @map("duration_seconds")
+  distanceMeters      Float?   @map("distance_meters")
+  isWarmup            Boolean  @default(false) @map("is_warmup")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  workoutExercise     WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+
+  @@map("exercise_sets")
+}
+
+model BodyMetric {
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  date                String
+  weightKg            Float    @map("weight_kg")
+  heightCm            Float?   @map("height_cm")
+  bmi                 Float?
+  bodyFatPercentage   Float?   @map("body_fat_percentage")
+  waistCm             Float?   @map("waist_cm")
+  chestCm             Float?   @map("chest_cm")
+  armsCm              Float?   @map("arms_cm")
+  thighsCm            Float?   @map("thighs_cm")
+  notes               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("body_metrics")
+}
+
+model Habit {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  name          String
+  icon          String   @default("target")
+  color         String   @default("#f59e0b")
+  targetValue   Int      @default(1) @map("target_value")
+  unit          String   @default("times")
+  frequency     String   @default("daily")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs          HabitLog[]
+
+  @@map("habits")
+}
+
+model HabitLog {
+  id          String   @id @default(cuid())
+  habitId     String   @map("habit_id")
+  userId      String   @map("user_id")
+  date        String
+  value       Int      @default(0)
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  habit       Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, date])
+  @@map("habit_logs")
+}

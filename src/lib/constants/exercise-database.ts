@@ -1,0 +1,60 @@
+import type { Exercise } from '@/lib/types';
+
+export const EXERCISE_DATABASE: Omit<Exercise, 'id' | 'created_at' | 'created_by'>[] = [
+  // === CHEST ===
+  { name: 'Barbell Bench Press', muscle_group: 'chest', equipment: 'Barbell, Bench', instructions: 'Lie on bench, grip barbell, lower to chest, press up.', is_custom: false },
+  { name: 'Incline Bench Press', muscle_group: 'chest', equipment: 'Barbell, Incline Bench', instructions: 'Incline bench at 30-45°, press barbell from chest.', is_custom: false },
+  { name: 'Dumbbell Bench Press', muscle_group: 'chest', equipment: 'Dumbbells, Bench', instructions: 'Lie on bench, press dumbbells from chest level.', is_custom: false },
+  { name: 'Dumbbell Flyes', muscle_group: 'chest', equipment: 'Dumbbells, Bench', instructions: 'Arms extended, lower dumbbells in arc motion.', is_custom: false },
+  { name: 'Push-ups', muscle_group: 'chest', equipment: 'Bodyweight', instructions: 'Plank position, lower body, push back up.', is_custom: false },
+  { name: 'Cable Crossover', muscle_group: 'chest', equipment: 'Cable Machine', instructions: 'Stand between cables, bring handles together in front.', is_custom: false },
+  { name: 'Chest Dips', muscle_group: 'chest', equipment: 'Dip Bars', instructions: 'Lean forward on dip bars, lower and push up.', is_custom: false },
+  // === BACK ===
+  { name: 'Barbell Deadlift', muscle_group: 'back', equipment: 'Barbell', instructions: 'Hinge at hips, grip bar, stand up straight.', is_custom: false },
+  { name: 'Pull-ups', muscle_group: 'back', equipment: 'Pull-up Bar', instructions: 'Hang from bar, pull chin above bar.', is_custom: false },
+  { name: 'Lat Pulldown', muscle_group: 'back', equipment: 'Cable Machine', instructions: 'Pull bar down to chest, squeeze lats.', is_custom: false },
+  { name: 'Barbell Row', muscle_group: 'back', equipment: 'Barbell', instructions: 'Bend over, pull barbell to lower chest.', is_custom: false },
+  { name: 'Dumbbell Row', muscle_group: 'back', equipment: 'Dumbbell, Bench', instructions: 'One arm on bench, row dumbbell to hip.', is_custom: false },
+  { name: 'Seated Cable Row', muscle_group: 'back', equipment: 'Cable Machine', instructions: 'Sit upright, pull handle to torso.', is_custom: false },
+  { name: 'T-Bar Row', muscle_group: 'back', equipment: 'T-Bar', instructions: 'Straddle bar, row to chest.', is_custom: false },
+  // === SHOULDERS ===
+  { name: 'Overhead Press', muscle_group: 'shoulders', equipment: 'Barbell', instructions: 'Press barbell overhead from shoulder height.', is_custom: false },
+  { name: 'Dumbbell Shoulder Press', muscle_group: 'shoulders', equipment: 'Dumbbells', instructions: 'Press dumbbells overhead from shoulder height.', is_custom: false },
+  { name: 'Lateral Raises', muscle_group: 'shoulders', equipment: 'Dumbbells', instructions: 'Raise dumbbells to sides until shoulder height.', is_custom: false },
+  { name: 'Front Raises', muscle_group: 'shoulders', equipment: 'Dumbbells', instructions: 'Raise dumbbells in front to shoulder height.', is_custom: false },
+  { name: 'Face Pulls', muscle_group: 'shoulders', equipment: 'Cable Machine', instructions: 'Pull rope to face, external rotate.', is_custom: false },
+  { name: 'Arnold Press', muscle_group: 'shoulders', equipment: 'Dumbbells', instructions: 'Rotate dumbbells while pressing overhead.', is_custom: false },
+  // === LEGS ===
+  { name: 'Barbell Squat', muscle_group: 'legs', equipment: 'Barbell, Squat Rack', instructions: 'Bar on back, squat down, stand up.', is_custom: false },
+  { name: 'Front Squat', muscle_group: 'legs', equipment: 'Barbell, Squat Rack', instructions: 'Bar on front delts, squat down.', is_custom: false },
+  { name: 'Leg Press', muscle_group: 'legs', equipment: 'Leg Press Machine', instructions: 'Push platform away with feet.', is_custom: false },
+  { name: 'Romanian Deadlift', muscle_group: 'legs', equipment: 'Barbell', instructions: 'Hinge at hips, lower bar along legs.', is_custom: false },
+  { name: 'Leg Extension', muscle_group: 'legs', equipment: 'Machine', instructions: 'Extend legs against pad.', is_custom: false },
+  { name: 'Leg Curl', muscle_group: 'legs', equipment: 'Machine', instructions: 'Curl legs against pad.', is_custom: false },
+  { name: 'Lunges', muscle_group: 'legs', equipment: 'Dumbbells', instructions: 'Step forward, lower back knee.', is_custom: false },
+  { name: 'Bulgarian Split Squat', muscle_group: 'legs', equipment: 'Dumbbells, Bench', instructions: 'Rear foot on bench, squat on front leg.', is_custom: false },
+  { name: 'Calf Raises', muscle_group: 'legs', equipment: 'Machine', instructions: 'Rise onto toes, lower slowly.', is_custom: false },
+  { name: 'Hip Thrust', muscle_group: 'legs', equipment: 'Barbell, Bench', instructions: 'Back on bench, thrust hips up with barbell.', is_custom: false },
+  // === ARMS ===
+  { name: 'Barbell Curl', muscle_group: 'arms', equipment: 'Barbell', instructions: 'Curl barbell from thigh to shoulder.', is_custom: false },
+  { name: 'Dumbbell Curl', muscle_group: 'arms', equipment: 'Dumbbells', instructions: 'Curl dumbbells alternating or together.', is_custom: false },
+  { name: 'Hammer Curl', muscle_group: 'arms', equipment: 'Dumbbells', instructions: 'Curl with neutral grip (thumbs up).', is_custom: false },
+  { name: 'Tricep Pushdown', muscle_group: 'arms', equipment: 'Cable Machine', instructions: 'Push cable bar/rope down, extend arms.', is_custom: false },
+  { name: 'Skull Crushers', muscle_group: 'arms', equipment: 'EZ Bar, Bench', instructions: 'Lower bar to forehead, extend arms.', is_custom: false },
+  { name: 'Overhead Tricep Extension', muscle_group: 'arms', equipment: 'Dumbbell', instructions: 'Hold dumbbell overhead, lower behind head.', is_custom: false },
+  { name: 'Preacher Curl', muscle_group: 'arms', equipment: 'EZ Bar, Preacher Bench', instructions: 'Curl bar with arms on preacher pad.', is_custom: false },
+  // === CORE ===
+  { name: 'Plank', muscle_group: 'core', equipment: 'Bodyweight', instructions: 'Hold push-up position on forearms.', is_custom: false },
+  { name: 'Crunches', muscle_group: 'core', equipment: 'Bodyweight', instructions: 'Lie on back, curl shoulders toward knees.', is_custom: false },
+  { name: 'Hanging Leg Raise', muscle_group: 'core', equipment: 'Pull-up Bar', instructions: 'Hang from bar, raise legs to 90°.', is_custom: false },
+  { name: 'Russian Twist', muscle_group: 'core', equipment: 'Bodyweight/Plate', instructions: 'Sit, lean back, twist side to side.', is_custom: false },
+  { name: 'Ab Wheel Rollout', muscle_group: 'core', equipment: 'Ab Wheel', instructions: 'Kneel, roll wheel forward, pull back.', is_custom: false },
+  { name: 'Cable Woodchop', muscle_group: 'core', equipment: 'Cable Machine', instructions: 'Rotate torso pulling cable diagonally.', is_custom: false },
+  // === CARDIO ===
+  { name: 'Treadmill Running', muscle_group: 'cardio', equipment: 'Treadmill', instructions: 'Run at desired pace and incline.', is_custom: false },
+  { name: 'Stationary Bike', muscle_group: 'cardio', equipment: 'Bike', instructions: 'Cycle at desired resistance and cadence.', is_custom: false },
+  { name: 'Rowing Machine', muscle_group: 'cardio', equipment: 'Rower', instructions: 'Row with full body motion.', is_custom: false },
+  { name: 'Elliptical', muscle_group: 'cardio', equipment: 'Elliptical', instructions: 'Stride on elliptical at desired resistance.', is_custom: false },
+  { name: 'Jump Rope', muscle_group: 'cardio', equipment: 'Jump Rope', instructions: 'Skip rope at desired pace.', is_custom: false },
+  { name: 'Stair Climber', muscle_group: 'cardio', equipment: 'Stair Machine', instructions: 'Climb stairs at desired speed.', is_custom: false },
+];
