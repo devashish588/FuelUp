@@ -42,8 +42,8 @@ export default function RootLayout({
               fontFamily: "'Inter', system-ui, sans-serif",
             },
             elements: {
-              // Card
-              card: "!bg-[rgba(17,17,17,0.85)] !backdrop-blur-xl !border !border-[rgba(255,255,255,0.08)] !shadow-[0_20px_60px_rgba(0,0,0,0.5),0_0_40px_rgba(245,158,11,0.06)] !rounded-[24px]",
+              // Card — seamless, no visible box
+              card: "!bg-transparent !border-none !shadow-none !rounded-none",
 
               // Header — high contrast
               headerTitle: "!text-white !font-bold !text-[22px]",
