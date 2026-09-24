@@ -1,25 +1,18 @@
 'use client';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-// import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
 import { useProfileStore } from '@/stores/profile-store';
 import { Dumbbell } from 'lucide-react';
 
 export default function Home() {
   const router = useRouter();
-  // const { isSignedIn, isLoaded } = useAuth();
-  // Temporary mock for debugging - will be signed out by default
-  const isSignedIn = false;
-  const isLoaded = true;
+  const { isSignedIn, isLoaded } = useAuth();
   const isOnboarded = useProfileStore((s) => s.isOnboarded);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (isSignedIn) {
-      router.replace(isOnboarded ? '/dashboard' : '/onboarding');
-    } else {
-      router.replace('/sign-in');
-    }
+    router.replace(isOnboarded ? '/dashboard' : '/onboarding');
   }, [isSignedIn, isLoaded, isOnboarded, router]);
 
   return (

@@ -59,19 +59,12 @@ export function cmToFeetInches(cm: number): string {
   return `${feet}'${inches}"`;
 }
 
-// BMI calculation
-export function calculateBMI(weightKg: number, heightCm: number): number {
-  const heightM = heightCm / 100;
-  return Math.round((weightKg / (heightM * heightM)) * 10) / 10;
-}
+// BMI calculation (canonical implementation lives in @/lib/calculations/metrics)
+export { calculateBMI, getBMICategory } from '@/lib/calculations/metrics';
 
-// BMI category
-export function getBMICategory(bmi: number): { label: string; color: string } {
-  if (bmi < 18.5) return { label: 'Underweight', color: '#3b82f6' };
-  if (bmi < 25) return { label: 'Normal', color: '#10b981' };
-  if (bmi < 30) return { label: 'Overweight', color: '#f59e0b' };
-  return { label: 'Obese', color: '#ef4444' };
-}
+// Streak + 1RM (canonical implementations live in @/lib/calculations)
+export { calculateStreak } from '@/lib/calculations/habits';
+export { calculate1RM } from '@/lib/calculations/workout';
 
 // Format weight for display
 export function formatWeight(kg: number, unit: 'metric' | 'imperial'): string {
@@ -107,32 +100,4 @@ export function formatNumber(num: number): string {
 export function percentage(value: number, total: number): number {
   if (total === 0) return 0;
   return Math.min(Math.round((value / total) * 100), 100);
-}
-
-// Streak calculator
-export function calculateStreak(dates: string[]): number {
-  if (dates.length === 0) return 0;
-  const sorted = [...dates].sort().reverse();
-  const today = toDateString();
-  const yesterday = toDateString(subDays(new Date(), 1));
-  
-  if (sorted[0] !== today && sorted[0] !== yesterday) return 0;
-  
-  let streak = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    const expected = toDateString(subDays(parseISO(sorted[0]), i));
-    if (sorted[i] === expected) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-  return streak;
-}
-
-// 1RM Calculator (Epley Formula)
-export function calculate1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps === 0) return 0;
-  return Math.round(weight * (1 + reps / 30));
 }

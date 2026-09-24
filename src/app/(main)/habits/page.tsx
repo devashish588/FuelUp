@@ -4,17 +4,16 @@ import { Plus, X, Trash2, Target, Check, ChevronLeft, ChevronRight, Pencil } fro
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { PageHeader } from '@/components/layout/header';
 import { useHabitStore } from '@/stores/habit-store';
-import { toDateString, cn, formatDateShort } from '@/lib/utils';
+import { cn, formatDateShort } from '@/lib/utils';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, addMonths, getDate, isToday } from 'date-fns';
 
 export default function HabitsPage() {
-  const { habits, habitLogs, logHabit, addHabit, removeHabit, updateHabit, getLogForHabit } = useHabitStore();
+  const { habits, habitLogs, logHabit, addHabit, removeHabit, updateHabit } = useHabitStore();
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ name: '' });
   const [viewMonth, setViewMonth] = useState(new Date());
   const [editingHabit, setEditingHabit] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
-  const today = toDateString();
   const activeHabits = habits.filter((h) => h.is_active);
 
   const prevMonth = () => setViewMonth(subMonths(viewMonth, 1));
@@ -118,7 +117,7 @@ export default function HabitsPage() {
                         ) : (
                           <span className="text-xs font-semibold text-[#EEE] truncate max-w-[100px]">{idx + 1}. {habit.name}</span>
                         )}
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-0.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100 transition-opacity">
                           <button onClick={() => startEditHabit(habit.id, habit.name)} className="p-0.5 text-[#555] hover:text-[#f59e0b] transition-colors">
                             <Pencil className="w-3 h-3" />
                           </button>
@@ -139,14 +138,16 @@ export default function HabitsPage() {
                           isCurrent && 'bg-[rgba(240,165,0,0.03)]'
                         )}>
                           <button onClick={() => toggleDay(habit.id, dateStr)}
+                            aria-label={`Toggle ${habit.name} for ${formatDateShort(dateStr)}`}
+                            aria-pressed={!!completed}
                             className={cn(
-                              'w-[22px] h-[22px] mx-auto rounded-[3px] border transition-all duration-150 flex items-center justify-center',
+                              'w-[28px] h-[28px] mx-auto rounded-[5px] border transition-all duration-150 flex items-center justify-center',
                               completed
                                 ? 'bg-[#f59e0b] border-[#f59e0b] text-[#111111]'
                                 : 'bg-transparent border-[rgba(230,213,184,0.12)] hover:border-[rgba(240,165,0,0.4)] hover:bg-[rgba(240,165,0,0.05)]'
                             )}
                             title={`${formatDateShort(dateStr)}`}>
-                            {completed && <Check className="w-3 h-3" strokeWidth={3} />}
+                            {completed && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
                           </button>
                         </td>
                       );
@@ -171,7 +172,7 @@ export default function HabitsPage() {
                     </td>
                     {daysInMonth.map((day, di) => (
                       <td key={di} className="px-0 py-1 text-center border-b border-[rgba(230,213,184,0.02)]">
-                        <div className="w-[22px] h-[22px] mx-auto rounded-[3px] border border-[rgba(230,213,184,0.04)]" />
+                        <div className="w-[28px] h-[28px] mx-auto rounded-[5px] border border-[rgba(230,213,184,0.04)]" />
                       </td>
                     ))}
                   </tr>
@@ -248,7 +249,7 @@ export default function HabitsPage() {
             <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-[rgba(230,213,184,0.06)]">
               {(() => {
                 const totalDone = scoreData.reduce((s, d) => s + d.done, 0);
-                const totalPossible = scoreData.reduce((s, d) => s + activeHabits.length, 0);
+                const totalPossible = scoreData.reduce((s) => s + activeHabits.length, 0);
                 const rate = totalPossible > 0 ? Math.round((totalDone / totalPossible) * 100) : 0;
                 const perfectDays = scoreData.filter(d => d.done === activeHabits.length && activeHabits.length > 0).length;
                 return [

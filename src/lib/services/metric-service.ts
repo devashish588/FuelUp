@@ -14,6 +14,10 @@ export async function addMetric(userId: string, data: {
   bmi?: number;
   bodyFatPercentage?: number | null;
   waistCm?: number | null;
+  chestCm?: number | null;
+  armsCm?: number | null;
+  thighsCm?: number | null;
+  notes?: string;
 }) {
   return db.bodyMetric.create({ data: { userId, ...data } });
 }

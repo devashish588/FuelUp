@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, UtensilsCrossed, Dumbbell, Target, Scale, Settings, Flame, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, Dumbbell, Target, Scale, Settings, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProfileStore } from '@/stores/profile-store';
 

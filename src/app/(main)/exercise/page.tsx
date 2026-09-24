@@ -1,12 +1,27 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { Play, Plus, X, Search, Clock, Trash2, Check, Timer, Dumbbell, BarChart3, Calendar, Trophy, Pencil } from 'lucide-react';
+import { Play, Plus, X, Search, Trash2, Check, Dumbbell, Calendar, Trophy, Pencil } from 'lucide-react';
 import { PageHeader } from '@/components/layout/header';
 import { useExerciseStore } from '@/stores/exercise-store';
 import { useWorkoutPlannerStore, type DayOfWeek } from '@/stores/workout-planner-store';
 import { formatDate, cn } from '@/lib/utils';
 import { MUSCLE_GROUPS } from '@/lib/constants';
-import type { MuscleGroup } from '@/lib/types';
+import type { MuscleGroup, Exercise, Workout, WorkoutExercise, ExerciseSet } from '@/lib/types';
+
+interface ActiveWorkoutProps {
+  workout: Workout;
+  onShowLibrary: (target: 'workout') => void;
+  onFinish: () => void;
+  onCancel: () => void;
+  onAddSet: (workoutExerciseId: string, set: Omit<ExerciseSet, 'id' | 'workout_exercise_id' | 'created_at'>) => void;
+  onUpdateSet: (workoutExerciseId: string, setId: string, updates: Partial<ExerciseSet>) => void;
+  onRemoveSet: (workoutExerciseId: string, setId: string) => void;
+  onRemoveExercise: (workoutExerciseId: string) => void;
+  restTimer: number | null;
+  onStartRest: () => void;
+  restSeconds: number;
+  onSetRestSeconds: (seconds: number) => void;
+}
 
 const DAY_ORDER: DayOfWeek[] = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 const DAY_SHORT: Record<DayOfWeek, string> = { monday:'Mon', tuesday:'Tue', wednesday:'Wed', thursday:'Thu', friday:'Fri', saturday:'Sat', sunday:'Sun' };
@@ -24,10 +39,11 @@ export default function ExercisePage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   useEffect(() => {
     if (restTimer !== null && restTimer > 0) {
-      timerRef.current = setInterval(() => setRestTimer((t) => t !== null ? t - 1 : null), 1000);
+      timerRef.current = setInterval(() => {
+        setRestTimer((t) => (t !== null && t > 1 ? t - 1 : null));
+      }, 1000);
       return () => clearInterval(timerRef.current);
     }
-    if (restTimer === 0) setRestTimer(null);
   }, [restTimer]);
 
   const openLibrary = (target: 'workout' | DayOfWeek) => {
@@ -91,7 +107,7 @@ export default function ExercisePage() {
       {tab === 'plan' && <WeeklyPlanView openLibrary={openLibrary} exercises={exercises} />}
 
       {/* PR TAB */}
-      {tab === 'prs' && <PRView exercises={exercises} />}
+      {tab === 'prs' && <PRView />}
 
       {showLibrary && (
         <ExerciseLibrary exercises={exercises} onSelect={handleSelectExercise} onClose={() => setShowLibrary(false)} />
@@ -101,7 +117,7 @@ export default function ExercisePage() {
 }
 
 /* =================== ACTIVE WORKOUT =================== */
-function ActiveWorkoutView({ workout, onShowLibrary, onFinish, onCancel, onAddSet, onUpdateSet, onRemoveSet, onRemoveExercise, restTimer, onStartRest, restSeconds, onSetRestSeconds }: any) {
+function ActiveWorkoutView({ workout, onShowLibrary, onFinish, onCancel, onAddSet, onUpdateSet, onRemoveSet, onRemoveExercise, restTimer, onStartRest, restSeconds, onSetRestSeconds }: ActiveWorkoutProps) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const start = new Date(workout.start_time).getTime();
@@ -139,7 +155,7 @@ function ActiveWorkoutView({ workout, onShowLibrary, onFinish, onCancel, onAddSe
         <button onClick={onStartRest} className="gradient-btn px-3 py-1.5 text-xs">Go</button>
       </div>
 
-      {workout.exercises.map((we: any) => (
+      {workout.exercises.map((we: WorkoutExercise) => (
         <div key={we.id} className="glass-card overflow-hidden">
           <div className="flex items-center justify-between p-4">
             <div>
@@ -152,13 +168,13 @@ function ActiveWorkoutView({ workout, onShowLibrary, onFinish, onCancel, onAddSe
             <div className="grid grid-cols-[40px_1fr_1fr_36px] gap-2 text-[9px] text-[#555] font-semibold uppercase mb-2 px-1">
               <span>Set</span><span>Weight</span><span>Reps</span><span></span>
             </div>
-            {we.sets.map((set: any, i: number) => (
+            {we.sets.map((set: ExerciseSet, i: number) => (
               <div key={set.id} className="grid grid-cols-[40px_1fr_1fr_36px] gap-2 items-center mb-2">
                 <span className="text-xs font-bold text-[#555] text-center bg-[rgba(230,213,184,0.03)] rounded-lg py-1.5">{i + 1}</span>
-                <input type="number" value={set.weight_kg || ''} onChange={(e) => onUpdateSet(we.id, set.id, { weight_kg: parseFloat(e.target.value) || 0 })}
-                  className="dark-input py-2 text-xs text-center" placeholder="kg" />
-                <input type="number" value={set.reps || ''} onChange={(e) => onUpdateSet(we.id, set.id, { reps: parseInt(e.target.value) || 0 })}
-                  className="dark-input py-2 text-xs text-center" placeholder="reps" />
+                <input type="number" inputMode="decimal" min={0} value={set.weight_kg || ''} onChange={(e) => onUpdateSet(we.id, set.id, { weight_kg: Math.max(0, parseFloat(e.target.value) || 0) })}
+                  className="dark-input py-2 text-xs text-center" placeholder="kg" aria-label={`Set ${i + 1} weight in kilograms`} />
+                <input type="number" inputMode="numeric" min={0} value={set.reps || ''} onChange={(e) => onUpdateSet(we.id, set.id, { reps: Math.max(0, parseInt(e.target.value) || 0) })}
+                  className="dark-input py-2 text-xs text-center" placeholder="reps" aria-label={`Set ${i + 1} reps`} />
                 <button onClick={() => onRemoveSet(we.id, set.id)} className="text-[#444] hover:text-[#ea580c] flex justify-center p-1"><X className="w-3.5 h-3.5" /></button>
               </div>
             ))}
@@ -181,7 +197,7 @@ function ActiveWorkoutView({ workout, onShowLibrary, onFinish, onCancel, onAddSe
 }
 
 /* =================== WORKOUT HISTORY =================== */
-function WorkoutHistory({ workouts, onStart }: { workouts: any[]; onStart: () => void }) {
+function WorkoutHistory({ workouts, onStart }: { workouts: Workout[]; onStart: () => void }) {
   if (workouts.length === 0) {
     return (
       <div className="px-4 lg:px-0 py-16 text-center">
@@ -205,7 +221,7 @@ function WorkoutHistory({ workouts, onStart }: { workouts: any[]; onStart: () =>
             <span>{w.duration_minutes || 0} min</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {w.exercises?.map((we: any) => (
+            {w.exercises?.map((we: WorkoutExercise) => (
               <span key={we.id} className="bg-[rgba(230,213,184,0.04)] text-[#AAA] text-[10px] px-2 py-0.5 rounded-lg">{we.exercise?.name}</span>
             ))}
           </div>
@@ -216,7 +232,7 @@ function WorkoutHistory({ workouts, onStart }: { workouts: any[]; onStart: () =>
 }
 
 /* =================== WEEKLY PLAN =================== */
-function WeeklyPlanView({ openLibrary, exercises }: { openLibrary: (day: DayOfWeek) => void; exercises: any[] }) {
+function WeeklyPlanView({ openLibrary }: { openLibrary: (day: DayOfWeek) => void; exercises: Exercise[] }) {
   const { weeklyPlan, removeExerciseFromDay, updateDayLabel } = useWorkoutPlannerStore();
   const [editingDay, setEditingDay] = useState<DayOfWeek | null>(null);
   const [editLabel, setEditLabel] = useState('');
@@ -265,7 +281,8 @@ function WeeklyPlanView({ openLibrary, exercises }: { openLibrary: (day: DayOfWe
                       <span className="text-[10px] text-[#555] ml-2">{ex.sets} × {ex.reps}</span>
                     </div>
                     <button onClick={() => removeExerciseFromDay(day, ex.id)}
-                      className="opacity-0 group-hover:opacity-100 text-[#444] hover:text-[#ea580c] p-1 transition-all">
+                      aria-label="Remove exercise"
+                      className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100 text-[#444] hover:text-[#ea580c] p-2 -m-1 lg:p-1 lg:m-0 transition-all">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
@@ -280,7 +297,7 @@ function WeeklyPlanView({ openLibrary, exercises }: { openLibrary: (day: DayOfWe
 }
 
 /* =================== PERSONAL RECORDS =================== */
-function PRView({ exercises }: { exercises: any[] }) {
+function PRView() {
   const { prs, addPR, removePR } = useWorkoutPlannerStore();
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: '', weight: '', reps: '1' });
@@ -324,7 +341,7 @@ function PRView({ exercises }: { exercises: any[] }) {
                 <div className="text-right">
                   <div className="text-xl font-bold text-[#f59e0b]">{pr.weight_kg}<span className="text-xs font-normal text-[#777]">kg</span></div>
                 </div>
-                <button onClick={() => removePR(pr.id)} className="opacity-0 group-hover:opacity-100 text-[#444] hover:text-[#ea580c] p-1 transition-all">
+                <button onClick={() => removePR(pr.id)} aria-label="Remove personal record" className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100 text-[#444] hover:text-[#ea580c] p-2 -m-1 lg:p-1 lg:m-0 transition-all">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -346,10 +363,10 @@ function PRView({ exercises }: { exercises: any[] }) {
               <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="Exercise name (e.g., Deadlift)" className="dark-input" autoFocus />
               <div className="grid grid-cols-2 gap-3">
-                <input type="number" value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))}
-                  placeholder="Weight (kg)" className="dark-input" />
-                <input type="number" value={form.reps} onChange={e => setForm(f => ({ ...f, reps: e.target.value }))}
-                  placeholder="Reps" className="dark-input" />
+                <input type="number" inputMode="decimal" min={0} value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))}
+                  placeholder="Weight (kg)" className="dark-input" aria-label="Personal record weight in kilograms" />
+                <input type="number" inputMode="numeric" min={0} value={form.reps} onChange={e => setForm(f => ({ ...f, reps: e.target.value }))}
+                  placeholder="Reps" className="dark-input" aria-label="Personal record reps" />
               </div>
               <button onClick={handleAdd} className="w-full gradient-btn py-3">Save PR</button>
             </div>
@@ -361,10 +378,10 @@ function PRView({ exercises }: { exercises: any[] }) {
 }
 
 /* =================== EXERCISE LIBRARY =================== */
-function ExerciseLibrary({ exercises, onSelect, onClose }: { exercises: any[]; onSelect: (id: string) => void; onClose: () => void }) {
+function ExerciseLibrary({ exercises, onSelect, onClose }: { exercises: Exercise[]; onSelect: (id: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [filterGroup, setFilterGroup] = useState<MuscleGroup | 'all'>('all');
-  const filtered = exercises.filter((e: any) => {
+  const filtered = exercises.filter((e: Exercise) => {
     const q = e.name.toLowerCase().includes(query.toLowerCase());
     const g = filterGroup === 'all' || e.muscle_group === filterGroup;
     return q && g;
@@ -372,7 +389,7 @@ function ExerciseLibrary({ exercises, onSelect, onClose }: { exercises: any[]; o
 
   return (
     <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/60 backdrop-blur-sm fade-in" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#111111] border border-[rgba(230,213,184,0.08)] rounded-t-3xl lg:rounded-2xl shadow-2xl slide-up max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-lg bg-[#111111] border border-[rgba(230,213,184,0.08)] rounded-t-3xl lg:rounded-2xl shadow-2xl slide-up max-h-[85vh] flex flex-col max-lg:pb-safe" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-[rgba(230,213,184,0.06)]">
           <h3 className="text-lg font-bold text-[#EEE]">Exercise Library</h3>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-[rgba(230,213,184,0.06)] flex items-center justify-center hover:bg-[rgba(230,213,184,0.1)]"><X className="w-4 h-4 text-[#777]" /></button>
@@ -393,7 +410,7 @@ function ExerciseLibrary({ exercises, onSelect, onClose }: { exercises: any[]; o
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-1">
-          {filtered.map((e: any) => (
+          {filtered.map((e: Exercise) => (
             <button key={e.id} onClick={() => onSelect(e.id)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-[rgba(230,213,184,0.04)] transition-colors text-left">
               <div>
                 <div className="text-sm font-medium text-[#EEE]">{e.name}</div>

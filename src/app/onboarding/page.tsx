@@ -1,7 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import './onboarding.css';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import { ChevronRight, ChevronLeft, Flame, User, Ruler, Target, Zap, Dumbbell, BarChart3, Heart, ArrowDown, TrendingUp, Scale } from 'lucide-react';
 import { useProfileStore } from '@/stores/profile-store';
 import { generateRecommendation } from '@/lib/services/recommendation-engine';
@@ -11,23 +12,26 @@ import type { Profile, ActivityLevel } from '@/lib/types';
 
 const STEPS = ['Welcome', 'Basic Info', 'Body Metrics', 'Your Goal'];
 
+const emptySubscribe = () => () => {};
+function useIsMounted() {
+  return useSyncExternalStore(emptySubscribe, () => true, () => false);
+}
+
 // Animated background particles
+const PARTICLES = Array.from({ length: 20 }).map((_, i) => ({
+  left: `${(i * 17 + 7) % 100}%`,
+  top: `${(i * 23 + 13) % 100}%`,
+  animationDelay: `${(i * 1.3) % 8}s`,
+  animationDuration: `${6 + ((i * 1.7) % 8)}s`,
+  width: `${2 + (i % 4)}px`,
+  height: `${2 + (i % 4)}px`,
+}));
+
 function FloatingParticles() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {Array.from({ length: 20 }).map((_, i) => (
-        <div
-          key={i}
-          className="particle"
-          style={{
-            left: `${Math.random() * 100}%`,
-            top: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 8}s`,
-            animationDuration: `${6 + Math.random() * 8}s`,
-            width: `${2 + Math.random() * 4}px`,
-            height: `${2 + Math.random() * 4}px`,
-          }}
-        />
+      {PARTICLES.map((style, i) => (
+        <div key={i} className="particle" style={style} />
       ))}
     </div>
   );
@@ -48,17 +52,16 @@ function FeatureCard({ icon: Icon, title, desc }: { icon: React.ElementType; tit
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { user } = useUser();
   const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
   const [step, setStep] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsMounted();
   const [transitioning, setTransitioning] = useState(false);
   const [form, setForm] = useState({
     full_name: '', date_of_birth: '', gender: '' as 'male' | 'female' | 'other',
     weight_kg: '', height_cm: '', body_fat_percentage: '',
     activity_level: '' as ActivityLevel,
   });
-
-  useEffect(() => setMounted(true), []);
 
   const update = (field: string, value: string) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -81,12 +84,19 @@ export default function OnboardingPage() {
     });
 
     const profile: Profile = {
-      id: generateId(), full_name: form.full_name || 'User',
-      email: 'user@fuelup.app', date_of_birth: form.date_of_birth,
+      id: generateId(), full_name: form.full_name || user?.fullName || 'User',
+      // Prefer the signed-in Clerk email; empty string keeps validation honest
+      // (no fake placeholder) until cloud sync lands in Phase 2.
+      email: user?.primaryEmailAddress?.emailAddress ?? '',
+      date_of_birth: form.date_of_birth,
       gender: form.gender || 'male', activity_level: form.activity_level || 'moderately_active',
       goal: rec.goal, unit_system: 'metric',
       daily_calorie_target: rec.daily_calories, protein_target_g: rec.protein_g,
       carbs_target_g: rec.carbs_g, fat_target_g: rec.fat_g,
+      // Phase 7: fresh estimates start from the onboarding calculation.
+      // No target rate is forced here — the goal default applies until edited.
+      target_rate_kg_per_week: null,
+      target_source: 'initial',
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
 

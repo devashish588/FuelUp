@@ -1,21 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 
-const isPublicRoute = (pathname: string) => {
-  const publicRoutes = [
-    '/',
-    '/sign-in',
-    '/sign-up',
-    '/onboarding',
-    '/api/webhooks',
-    '/_next',
-  ];
-  return publicRoutes.some(route => pathname.startsWith(route)) || pathname.includes('.');
-};
+// Phase 1: Clerk middleware restored (was a permissive passthrough).
+// Pages stay reachable so localStorage-only mode keeps working; API
+// authorization is enforced per-route via lib/auth (401 when signed out).
+// Phase 2 will tighten page protection once cloud sync lands.
+const isWebhookRoute = createRouteMatcher(['/api/webhooks(.*)']);
 
-export function middleware(request: NextRequest) {
-  // For now, allow all requests through (auth disabled for development)
+export default clerkMiddleware(async (auth, req) => {
+  if (isWebhookRoute(req)) {
+    // Clerk/Svix verification happens inside the webhook handler.
+    return NextResponse.next();
+  }
+  // Pages + non-webhook API routes continue through Clerk's session
+  // handling; API handlers call requireDbUser() for 401s.
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: [

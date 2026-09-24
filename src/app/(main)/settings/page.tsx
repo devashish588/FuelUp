@@ -3,17 +3,28 @@ import { useState } from 'react';
 import { User, Scale, Target, Settings, Download, Trash2, ChevronRight, Flame, Shield } from 'lucide-react';
 import { Card, SectionLabel } from '@/components/ui/card';
 import { PageHeader } from '@/components/layout/header';
+import { SyncStatusCard } from '@/components/sync/sync-status-card';
+import { InstallCard } from '@/components/pwa/install-card';
+import { DiagnosticsCard } from '@/components/pwa/diagnostics-card';
+import { APP_VERSION } from '@/config/app';
 import { useProfileStore } from '@/stores/profile-store';
 import { useCalorieStore } from '@/stores/calorie-store';
 import { useMetricsStore } from '@/stores/metrics-store';
 import { useExerciseStore } from '@/stores/exercise-store';
 import { useHabitStore } from '@/stores/habit-store';
 import { ACTIVITY_LABELS, GOAL_LABELS } from '@/lib/constants';
-import { cn } from '@/lib/utils';
+import { resolveTargetRate } from '@/lib/calculations/energy';
+import { useEnergyStore } from '@/stores/energy-store';
+import { cn, formatDate } from '@/lib/utils';
+import { clearOwnerLocalData } from '@/lib/migration/reset';
+import { useSessionStore } from '@/lib/session/session-store';
+import { useWorkoutPlannerStore, DEFAULT_PLAN } from '@/stores/workout-planner-store';
+import { useRecipeStore } from '@/stores/recipe-store';
 import type { ActivityLevel, GoalType } from '@/lib/types';
 
 export default function SettingsPage() {
   const { profile, setProfile, reset } = useProfileStore();
+  const energy = useEnergyStore(s => s.state);
   const [editing, setEditing] = useState<string | null>(null);
   const [formValue, setFormValue] = useState('');
   if (!profile) return null;
@@ -21,36 +32,92 @@ export default function SettingsPage() {
   const startEdit = (f: string, v: string) => { setEditing(f); setFormValue(v); };
   const saveEdit = () => {
     if (!editing) return;
-    if (['daily_calorie_target', 'protein_target_g', 'carbs_target_g', 'fat_target_g'].includes(editing)) setProfile({ [editing]: parseInt(formValue) || 0 });
-    else setProfile({ [editing]: formValue });
+    if (['daily_calorie_target', 'protein_target_g', 'carbs_target_g', 'fat_target_g'].includes(editing)) {
+      // Phase 7: hand-edited targets pause adaptive updates (source 'manual').
+      setProfile({ [editing]: parseInt(formValue) || 0, target_source: 'manual' });
+    } else if (editing === 'target_rate_kg_per_week') {
+      const trimmed = formValue.trim();
+      const rate = trimmed === '' ? null : Math.min(Math.max(parseFloat(trimmed) || 0, 0), 1.5);
+      setProfile({ target_rate_kg_per_week: rate });
+    } else setProfile({ [editing]: formValue });
     setEditing(null);
   };
 
   const handleExport = () => {
-    const data = { profile, calories: useCalorieStore.getState().foodLogs, metrics: useMetricsStore.getState().metrics, workouts: useExerciseStore.getState().workouts, habits: useHabitStore.getState().habits, habitLogs: useHabitStore.getState().habitLogs };
+    const cal = useCalorieStore.getState();
+    const data = {
+      profile,
+      foods: cal.foodItems,
+      favorites: cal.favorites,
+      calories: cal.foodLogs,
+      recipes: useRecipeStore.getState().recipes,
+      recipeIngredients: useRecipeStore.getState().ingredients,
+      metrics: useMetricsStore.getState().metrics,
+      workouts: useExerciseStore.getState().workouts,
+      habits: useHabitStore.getState().habits,
+      habitLogs: useHabitStore.getState().habitLogs,
+      targetHistory: useEnergyStore.getState().history,
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const a = document.createElement('a');
     a.href = url; a.download = `fuelup-export-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url);
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (confirm('Reset all data? This cannot be undone.')) {
-      reset(); useCalorieStore.persist.clearStorage(); useMetricsStore.persist.clearStorage(); useExerciseStore.persist.clearStorage(); useHabitStore.persist.clearStorage();
+      // Clear the current owner's IndexedDB namespace + legacy payloads first.
+      const ownerId = useSessionStore.getState().ownerId;
+      if (ownerId) {
+        try {
+          await clearOwnerLocalData(ownerId);
+        } catch {
+          /* reset proceeds with in-memory + legacy clearing below */
+        }
+      }
+      reset();
+      // Only profile (onboarding flag) + exercise (active draft) still use
+      // zustand/persist; the rest now live in IndexedDB (cleared above).
+      useProfileStore.persist.clearStorage();
+      useExerciseStore.persist.clearStorage();
+      useWorkoutPlannerStore.setState({ weeklyPlan: DEFAULT_PLAN, prs: [], ready: false });
+      useCalorieStore.setState({ foodLogs: [], favorites: [], ready: false });
+      useRecipeStore.setState({ recipes: [], ingredients: [], ready: false });
+      useMetricsStore.setState({ metrics: [], ready: false });
+      useEnergyStore.setState({ state: null, history: [], ownerId: null, ready: false, lastError: null });
+      useHabitStore.setState({ habits: [], habitLogs: [], ready: false });
+      useExerciseStore.setState({ workouts: [], activeWorkout: null, ready: false });
       window.location.href = '/onboarding';
     }
   };
 
   const profileRows = [
     { label: 'Name', value: profile.full_name, field: 'full_name', icon: User },
-    { label: 'Goal', value: GOAL_LABELS[profile.goal], field: 'goal', icon: Target },
-    { label: 'Activity', value: ACTIVITY_LABELS[profile.activity_level], field: 'activity_level', icon: Settings },
+    // Unknown enum values (legacy/corrupt rows) fall back to raw text, never blank.
+    { label: 'Goal', value: GOAL_LABELS[profile.goal as keyof typeof GOAL_LABELS] ?? String(profile.goal), field: 'goal', icon: Target },
+    { label: 'Activity', value: ACTIVITY_LABELS[profile.activity_level as keyof typeof ACTIVITY_LABELS] ?? String(profile.activity_level).replace(/_/g, ' '), field: 'activity_level', icon: Settings },
   ];
   const nutritionRows = [
     { label: 'Daily Calories', value: `${profile.daily_calorie_target} kcal`, field: 'daily_calorie_target', icon: Flame },
     { label: 'Protein', value: `${profile.protein_target_g}g`, field: 'protein_target_g', icon: Scale },
     { label: 'Carbs', value: `${profile.carbs_target_g}g`, field: 'carbs_target_g', icon: Scale },
     { label: 'Fat', value: `${profile.fat_target_g}g`, field: 'fat_target_g', icon: Scale },
+    // Phase 7: explicit weekly rate (blank = goal default); editing never
+    // forces onboarding changes and never implies medical advice.
+    {
+      label: 'Target Rate',
+      value: profile.target_rate_kg_per_week === null
+        ? `${resolveTargetRate(profile.goal, null)} kg/wk (goal default)`
+        : `${profile.target_rate_kg_per_week} kg/wk`,
+      field: 'target_rate_kg_per_week',
+      icon: Target,
+    },
   ];
+  const basisLabel =
+    profile.target_source === 'adaptive' && energy?.mode === 'adaptive'
+      ? `Adaptive · based on ${energy.validNutritionDays} days of data`
+      : profile.target_source === 'manual'
+        ? 'Edited by you · adaptive updates paused'
+        : 'Starting estimate';
 
   const SettingRow = ({ label, value, field, icon: Icon }: { label: string; value: string; field: string; icon: React.ElementType }) => (
     <button onClick={() => startEdit(field, String(profile[field as keyof typeof profile] || ''))}
@@ -93,12 +160,35 @@ export default function SettingsPage() {
             <Card className="!p-0 divide-y divide-[#1a1a1a] overflow-hidden">
               {nutritionRows.map(r => <SettingRow key={r.field} {...r} />)}
             </Card>
+            {/* Phase 7: target provenance + rule-generated explanation. */}
+            <Card className="mt-3">
+              <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider">Target Basis</div>
+              <p className="text-[13px] text-white font-semibold mt-1">{basisLabel}</p>
+              {energy?.explanation.reasons.map((r, i) => (
+                <p key={i} className="text-[12px] text-[#777] leading-relaxed mt-1">• {r}</p>
+              ))}
+              {energy?.lastChange && (
+                <p className="text-[11px] text-[#555] mt-1">
+                  Last change: {energy.lastChange.previous_target.toLocaleString()} →{' '}
+                  {energy.lastChange.new_target.toLocaleString()} kcal on {formatDate(energy.lastChange.date)}
+                </p>
+              )}
+            </Card>
+          </div>
+        </div>
+
+        <div>
+          <SectionLabel>App</SectionLabel>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <InstallCard />
+            <DiagnosticsCard />
           </div>
         </div>
 
         <div>
           <SectionLabel>Data</SectionLabel>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <SyncStatusCard />
             <Card onClick={handleExport} interactive>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-[rgba(240,165,0,0.1)] flex items-center justify-center"><Download className="w-4 h-4 text-[#f59e0b]" /></div>
@@ -114,7 +204,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <p className="text-[11px] text-[#444] text-center flex items-center justify-center gap-1"><Shield className="w-3 h-3" /> FuelUp v1.0 · Data stays on device</p>
+        <p className="text-[11px] text-[#444] text-center flex items-center justify-center gap-1"><Shield className="w-3 h-3" /> FuelUp v{APP_VERSION} · Data stays on device</p>
       </div>
 
       {editing && (
@@ -133,7 +223,12 @@ export default function SettingsPage() {
               ))}</div>
             ) : (
               <div className="space-y-3">
-                <input type={['daily_calorie_target', 'protein_target_g', 'carbs_target_g', 'fat_target_g'].includes(editing) ? 'number' : 'text'} value={formValue} onChange={e => setFormValue(e.target.value)} className="dark-input" autoFocus />
+                <input type={['daily_calorie_target', 'protein_target_g', 'carbs_target_g', 'fat_target_g', 'target_rate_kg_per_week'].includes(editing) ? 'number' : 'text'} value={formValue} onChange={e => setFormValue(e.target.value)} className="dark-input" autoFocus
+                  step={editing === 'target_rate_kg_per_week' ? '0.1' : '1'}
+                  placeholder={editing === 'target_rate_kg_per_week' ? 'Blank = goal default' : undefined} />
+                {editing === 'target_rate_kg_per_week' && (
+                  <p className="text-[11px] text-[#555]">Weekly pace in kg (0–1.5). Blank uses the goal default.</p>
+                )}
                 <button onClick={saveEdit} className="w-full gradient-btn py-3">Save</button>
               </div>
             )}

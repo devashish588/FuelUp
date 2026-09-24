@@ -23,11 +23,13 @@ export async function updateHabit(id: string, userId: string, data: {
   targetValue?: number;
   isActive?: boolean;
 }) {
-  return db.habit.update({ where: { id, userId }, data });
+  const existing = await db.habit.findFirst({ where: { id, userId } });
+  if (!existing) throw new Error('Habit not found');
+  return db.habit.update({ where: { id: existing.id }, data });
 }
 
 export async function deleteHabit(id: string, userId: string) {
-  return db.habit.delete({ where: { id, userId } });
+  return db.habit.deleteMany({ where: { id, userId } });
 }
 
 export async function getHabitLogs(userId: string, date: string) {

@@ -50,11 +50,14 @@ export const ACTIVITY_LABELS = {
   extremely_active: 'Extremely Active (athlete, physical job)',
 } as const;
 
-// Goal Labels
+// Goal Labels (Phase 7 adds maintain + custom; onboarding auto-derive still
+// only ever assigns cut/bulk/recomp — the user picks maintain/custom).
 export const GOAL_LABELS = {
   cut: 'Cut (Fat Loss)',
   bulk: 'Bulk (Muscle Gain)',
   recomp: 'Recomposition',
+  maintain: 'Maintain Weight',
+  custom: 'Custom Target',
 } as const;
 
 // Meal Types (icons removed - using Lucide in components)

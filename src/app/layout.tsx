@@ -1,22 +1,31 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
+import { LocalSessionBootstrap } from "@/components/session/local-session-bootstrap";
+import { SwRegister } from "@/components/pwa/sw-register";
+import { PwaUpdateBanner } from "@/components/pwa/pwa-update-banner";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "FuelUp — Calorie & Fitness Tracker",
   description: "Track calories, workouts, body metrics, and habits all in one app. Your all-in-one fitness companion.",
   keywords: ["calorie tracker", "fitness", "workout", "habits", "body metrics"],
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "FuelUp" },
   icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-    apple: "/favicon.svg",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  viewportFit: "cover",
   themeColor: "#0b0b0c",
 };
 
@@ -90,6 +99,9 @@ export default function RootLayout({
             },
           }}
         >
+          <LocalSessionBootstrap />
+          <SwRegister />
+          <PwaUpdateBanner />
           {children}
         </ClerkProvider>
       </body>

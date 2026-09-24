@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Plain-JS PWA assets: covered by sw-guard unit tests, not TS lint.
+    "public/sw.js",
+    "scripts/**",
   ]),
 ]);
 

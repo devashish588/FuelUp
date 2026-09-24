@@ -1,9 +1,11 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { Plus, Flame, Dumbbell, Scale, UtensilsCrossed, Target, Zap, ChevronRight, TrendingUp, Activity, Trophy, Sparkles } from 'lucide-react';
+import { Plus, Flame, Dumbbell, Scale, UtensilsCrossed, Target, Zap, ChevronRight } from 'lucide-react';
 import { Card, SectionLabel, StatNumber, ProgressBar, EmptyState, InsightCard } from '@/components/ui/card';
 import { WeightTrend } from '@/components/charts/weight-trend';
+import { TargetBasisLabel } from '@/components/nutrition/target-basis-label';
 import { useProfileStore } from '@/stores/profile-store';
+import { useEnergyStore } from '@/stores/energy-store';
 import { useCalorieStore } from '@/stores/calorie-store';
 import { useMetricsStore } from '@/stores/metrics-store';
 import { useHabitStore } from '@/stores/habit-store';
@@ -31,11 +33,16 @@ export default function DashboardPage() {
   const remaining = Math.max(target - Math.round(sum.calories), 0);
   const pct = Math.min((sum.calories / target) * 100, 100);
   const weightData = [...metrics].sort((a, b) => a.date.localeCompare(b.date)).slice(-14).map(m => ({ date: m.date, weight: m.weight_kg }));
+  // Phase 7: smoothed trend overlay (same 7-day rolling median as the engine).
+  const energyState = useEnergyStore(s => s.state);
+  const trendByDate = new Map((energyState?.trend.points ?? []).map(p => [p.date, p.weight_kg]));
+  const trendData = weightData.some(d => trendByDate.has(d.date))
+    ? weightData.filter(d => trendByDate.has(d.date)).map(d => ({ date: d.date, value: trendByDate.get(d.date) as number }))
+    : undefined;
   const latestWeight = getLatest();
   const firstName = profile?.full_name?.split(' ')[0] || 'there';
   const activeHabits = habits.filter(h => h.is_active);
   const completedHabits = activeHabits.filter(h => getLogForHabit(h.id, today)?.completed).length;
-  const habitPct = activeHabits.length > 0 ? Math.round((completedHabits / activeHabits.length) * 100) : 0;
   const todayWorkouts = workouts.filter(w => w.date === today);
 
   // Streak
@@ -136,6 +143,7 @@ export default function DashboardPage() {
               <p className="text-[14px] text-[#666] mt-2">
                 of {target} kcal · <span className="text-[#f59e0b] font-semibold">{remaining} remaining</span>
               </p>
+              <div className="mt-1"><TargetBasisLabel /></div>
               <div className="mt-5 max-w-[300px]">
                 <ProgressBar value={sum.calories} max={target} height={6} color={pct > 100 ? '#ea580c' : '#f59e0b'} />
               </div>
@@ -242,7 +250,7 @@ export default function DashboardPage() {
           <SectionLabel action={<button onClick={() => router.push('/metrics')} className="text-[11px] text-[#f59e0b] font-semibold flex items-center gap-0.5 hover:opacity-80 transition-opacity">Details <ChevronRight className="w-3 h-3" /></button>}>
             Weight Trend
           </SectionLabel>
-          <WeightTrend data={weightData} />
+          <WeightTrend data={weightData} trend={trendData} />
         </Card>
       </div>
 

@@ -19,13 +19,21 @@ model User {
   proteinTargetG     Int @default(150) @map("protein_target_g")
   carbsTargetG       Int @default(200) @map("carbs_target_g")
   fatTargetG         Int @default(65) @map("fat_target_g")
+  // --- Phase 7: adaptive energy preferences ---
+  targetRateKgPerWeek Float? @map("target_rate_kg_per_week")
+  targetSource        String @default("initial") @map("target_source")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   foodItems     FoodItem[]
   foodLogs      FoodLog[]
+  favoriteFoods FavoriteFood[]
+  recipes       Recipe[]
+  recipeIngredients RecipeIngredient[]
   workouts      Workout[]
+  exercises     Exercise[]
   metrics       BodyMetric[]
+  targetHistory TargetHistory[]
   habits        Habit[]
   habitLogs     HabitLog[]
 
@@ -46,11 +54,27 @@ model FoodItem {
   fiberG              Float    @default(0) @map("fiber_g")
   barcode             String?
   isCustom            Boolean  @default(true) @map("is_custom")
+  // --- Phase 5: quantity-first model, provenance, classification ---
+  category            String   @default("")
+  source              String   @default("builtin")
+  sourceId            String?  @map("source_id")
+  aliases             String[] @default([])
+  countWeightG        Float?   @map("count_weight_g")
+  foodState           String?  @map("food_state")
+  preparation         String?
+  servingDescription  String?  @map("serving_description")
+  sugarG              Float?   @map("sugar_g")
+  sodiumMg            Float?   @map("sodium_mg")
+  isEstimated         Boolean  @default(false) @map("is_estimated")
   createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   user                User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   foodLogs            FoodLog[]
 
+  @@index([userId])
+  @@index([barcode])
+  @@index([userId, updatedAt])
   @@map("food_items")
 }
 
@@ -66,11 +90,23 @@ model FoodLog {
   carbsG      Float    @default(0) @map("carbs_g")
   fatG        Float    @default(0) @map("fat_g")
   notes       String?
+  // --- Phase 5: quantity-first input + frozen snapshot ---
+  quantity    Float?
+  quantityUnit String?  @map("quantity_unit")
+  fiberG      Float?   @map("fiber_g")
+  sugarG      Float?   @map("sugar_g")
+  sodiumMg    Float?   @map("sodium_mg")
+  foodName    String?  @map("food_name")
+  isEstimated Boolean  @default(false) @map("is_estimated")
   createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   foodItem    FoodItem @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
 
+  @@index([userId, date])
+  @@index([userId, date, mealType])
+  @@index([userId, updatedAt])
   @@map("food_logs")
 }
 
@@ -85,11 +121,33 @@ model Workout {
   caloriesBurned  Int?     @map("calories_burned")
   notes           String?
   createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises       WorkoutExercise[]
 
+  @@index([userId, date])
+  @@index([userId, updatedAt])
   @@map("workouts")
+}
+
+model Exercise {
+  id           String   @id @default(cuid())
+  userId       String?  @map("user_id")
+  name         String
+  muscleGroup  String   @default("full_body") @map("muscle_group")
+  equipment    String?
+  instructions String?
+  isCustom     Boolean  @default(true) @map("is_custom")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutExercises WorkoutExercise[]
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@map("exercises")
 }
 
 model WorkoutExercise {
@@ -101,8 +159,10 @@ model WorkoutExercise {
   createdAt   DateTime @default(now()) @map("created_at")
 
   workout     Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
   sets        ExerciseSet[]
 
+  @@index([workoutId])
   @@map("workout_exercises")
 }
 
@@ -136,10 +196,38 @@ model BodyMetric {
   thighsCm            Float?   @map("thighs_cm")
   notes               String?
   createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@index([userId, updatedAt])
   @@map("body_metrics")
+}
+
+// --- Phase 7: append-only target-change events (why did my target move?) ---
+model TargetHistory {
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  date                String
+  previousTarget      Int      @map("previous_target")
+  newTarget           Int      @map("new_target")
+  reason              String
+  maintenanceEstimate Int?     @map("maintenance_estimate")
+  validDays           Int?     @map("valid_days")
+  confidence          String?
+  goal                String   @default("recomp")
+  avgIntakeKcal       Int?     @map("avg_intake_kcal")
+
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@map("target_history")
 }
 
 model Habit {
@@ -153,10 +241,13 @@ model Habit {
   frequency     String   @default("daily")
   isActive      Boolean  @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   logs          HabitLog[]
 
+  @@index([userId])
+  @@index([userId, updatedAt])
   @@map("habits")
 }
 
@@ -168,10 +259,109 @@ model HabitLog {
   value       Int      @default(0)
   completed   Boolean  @default(false)
   createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   habit       Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([habitId, date])
+  @@index([userId, date])
+  @@index([habitId, date])
+  @@index([userId, updatedAt])
   @@map("habit_logs")
+}
+
+// =============================================
+// SYNC (Phase 3): idempotency + delete journal.
+// updatedAt on the models above provides pull cursors; these two tables
+// provide exactly-once push semantics and tombstone propagation.
+// =============================================
+
+model ProcessedMutation {
+  mutationId String   @id @map("mutation_id")
+  userId     String   @map("user_id")
+  entity     String
+  entityId   String   @map("entity_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("processed_mutations")
+}
+
+model SyncDeletion {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  entity     String
+  entityId   String   @map("entity_id")
+  deletedAt  DateTime @default(now()) @map("deleted_at")
+  mutationId String   @unique @map("mutation_id")
+
+  @@index([userId, deletedAt])
+  @@map("sync_deletions")
+}
+
+// Phase 5: explicit user favorites (seed + custom foods alike).
+model FavoriteFood {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  foodId    String   @map("food_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, foodId])
+  @@index([userId, updatedAt])
+  @@map("favorite_foods")
+}
+
+// Phase 6: recipes + home-cooked meal engine.
+// A saved recipe materializes as a FoodItem (source='recipe', same id,
+// per-100 basis). Recipe/RecipeIngredient hold the editable structure;
+// FoodLog rows hold the frozen consumed snapshot. foodItemId is a plain
+// string (no FK) so recipe deletion never cascades into history.
+model Recipe {
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  foodItemId          String   @unique @map("food_item_id")
+  name                String
+  description         String   @default("")
+  category            String   @default("")
+  preparation         String   @default("")
+  yieldQuantity       Float    @map("yield_quantity")
+  yieldUnit           String   @default("g") @map("yield_unit")
+  servingQuantity     Float?   @map("serving_quantity")
+  servingDescription  String   @default("") @map("serving_description")
+  source              String   @default("user")
+  isEstimated         Boolean  @default(false) @map("is_estimated")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredients         RecipeIngredient[]
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id           String   @id @default(cuid())
+  recipeId     String   @map("recipe_id")
+  userId       String   @map("user_id")
+  foodId       String   @map("food_id")
+  foodName     String   @default("") @map("food_name")
+  quantity     Float
+  quantityUnit String   @map("quantity_unit")
+  sortOrder    Int      @default(0) @map("sort_order")
+  notes        String   @default("")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe       Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+  @@index([userId, updatedAt])
+  @@map("recipe_ingredients")
 }

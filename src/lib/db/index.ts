@@ -1,18 +1,18 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import { hasDatabaseConfigured } from '@/config/env';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
 function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString || connectionString.includes('YOUR_PASSWORD')) {
-    // Return a client that will fail gracefully when no real DB is configured
-    // This allows the app to build and run with localStorage-only mode
+  if (!hasDatabaseConfigured()) {
+    // Local-storage-only mode: lets the app build/run without a real DB.
+    // API routes return 401/500 user-safe errors instead of connecting.
     return new PrismaClient();
   }
 
-  const pool = new pg.Pool({ connectionString });
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
 }

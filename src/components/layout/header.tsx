@@ -7,7 +7,7 @@ interface PageHeaderProps { title: string; showBack?: boolean; rightAction?: Rea
 export function PageHeader({ title, showBack, rightAction, subtitle }: PageHeaderProps) {
   const router = useRouter();
   return (
-    <header className="sticky top-0 z-40 bg-[#0b0b0c]/90 backdrop-blur-xl border-b border-[#1a1a1a]">
+    <header className="sticky top-0 z-40 bg-[#0b0b0c]/90 backdrop-blur-xl border-b border-[#1a1a1a] pt-safe">
       <div className="flex items-center justify-between h-14 px-6">
         <div className="flex items-center gap-3">
           {showBack && (

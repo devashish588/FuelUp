@@ -6,8 +6,12 @@ import { Card, SectionLabel, StatNumber, EmptyState } from '@/components/ui/card
 import { PageHeader } from '@/components/layout/header';
 import { useMetricsStore } from '@/stores/metrics-store';
 import { useProfileStore } from '@/stores/profile-store';
+import { useEnergyStore } from '@/stores/energy-store';
+import { EnergyEstimateCard } from '@/components/nutrition/energy-estimate-card';
+import { projectTargetTrend } from '@/lib/calculations/analytics';
 import { generateRecommendation } from '@/lib/services/recommendation-engine';
 import { toDateString, calculateBMI, getBMICategory, formatDate, calculateAge, formatDateShort } from '@/lib/utils';
+import { LOCAL_OWNER_ID } from '@/config/app';
 
 export default function MetricsPage() {
   const [showForm, setShowForm] = useState(false);
@@ -17,6 +21,24 @@ export default function MetricsPage() {
   const latest = getLatestMetric();
   const sorted = [...metrics].sort((a, b) => a.date.localeCompare(b.date));
   const wData = sorted.map(m => ({ date: m.date, weight: m.weight_kg }));
+  // Phase 7: smoothed trend overlay + goal-direction projection on the
+  // existing chart (actual series untouched). Projection is an illustration
+  // at the target rate, not a prediction.
+  const energy = useEnergyStore(s => s.state);
+  const trendMap = new Map((energy?.trend.points ?? []).map(p => [p.date, p.weight_kg]));
+  const projection = energy?.mode === 'adaptive' && energy.trend.trendEnd
+    ? projectTargetTrend(energy.trend.trendEnd, energy.goal, energy.rateKgPerWeek)
+    : [];
+  const projMap = new Map(projection.map(p => [p.date, p.weight_kg]));
+  const weightMap = new Map(wData.map(d => [d.date, d.weight]));
+  const chartDates = [...new Set([...weightMap.keys(), ...trendMap.keys(), ...projMap.keys()])].sort();
+  const wChart = chartDates.map(date => ({
+    date,
+    weight: weightMap.get(date) ?? null,
+    trend: trendMap.get(date) ?? null,
+    projection: projMap.get(date) ?? null,
+  }));
+  const showTrend = trendMap.size > 0;
   const bfData = sorted.filter(m => m.body_fat_percentage).map(m => ({ date: m.date, bf: m.body_fat_percentage }));
   const cw = latest?.weight_kg || 70;
   const ch = latest?.height_cm || 170;
@@ -28,7 +50,7 @@ export default function MetricsPage() {
   const submit = () => {
     const w = parseFloat(form.weight); if (!w) return;
     const h = parseFloat(form.height) || ch;
-    addMetric({ user_id: '', date: toDateString(), weight_kg: w, height_cm: h, bmi: calculateBMI(w, h),
+    addMetric({ user_id: LOCAL_OWNER_ID, date: toDateString(), weight_kg: w, height_cm: h, bmi: calculateBMI(w, h),
       body_fat_percentage: form.body_fat ? parseFloat(form.body_fat) : null, waist_cm: form.waist ? parseFloat(form.waist) : null,
       chest_cm: null, arms_cm: null, thighs_cm: null, notes: '' });
     setForm({ weight: '', height: '', body_fat: '', waist: '' }); setShowForm(false);
@@ -75,19 +97,37 @@ export default function MetricsPage() {
           </Card>
         )}
 
+        {/* Energy estimate (Phase 7, additive) */}
+        <EnergyEstimateCard />
+
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card className="!p-5">
             <SectionLabel>Weight Progress</SectionLabel>
+            {showTrend && (
+              <div className="flex items-center gap-4 mt-1 text-[10px] text-[#555]">
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-[2px] bg-[#f59e0b] rounded" /> Actual</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-[2px] bg-[#38bdf8] rounded" /> Trend</span>
+                {projMap.size > 0 && (
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-[2px] bg-[#a78bfa] rounded" /> Target pace</span>
+                )}
+              </div>
+            )}
             {wData.length > 0 ? (
               <div className="h-52 mt-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={wData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                  <LineChart data={wChart} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#161616" vertical={false} />
                     <XAxis dataKey="date" tickFormatter={d => formatDateShort(d)} tick={{ fontSize: 10, fill: '#555' }} axisLine={false} tickLine={false} />
                     <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fontSize: 10, fill: '#555' }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: '#111111', border: '1px solid #1a1a1a', borderRadius: '12px', fontSize: '12px', color: '#EEE' }} formatter={v => [`${v} kg`, 'Weight']} labelFormatter={d => formatDate(d as string)} />
-                    <Line type="monotone" dataKey="weight" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b', stroke: '#111111', strokeWidth: 2 }} activeDot={{ r: 5 }} />
+                    <Tooltip contentStyle={{ background: '#111111', border: '1px solid #1a1a1a', borderRadius: '12px', fontSize: '12px', color: '#EEE' }} formatter={(v, name) => [`${v} kg`, name === 'trend' ? 'Trend' : name === 'projection' ? 'Target pace' : 'Weight']} labelFormatter={d => formatDate(d as string)} />
+                    <Line type="monotone" dataKey="weight" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b', stroke: '#111111', strokeWidth: 2 }} activeDot={{ r: 5 }} connectNulls />
+                    {showTrend && (
+                      <Line type="monotone" dataKey="trend" stroke="#38bdf8" strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={false} connectNulls />
+                    )}
+                    {projMap.size > 0 && (
+                      <Line type="monotone" dataKey="projection" stroke="#a78bfa" strokeWidth={2} strokeDasharray="2 3" dot={false} activeDot={false} connectNulls />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -129,19 +169,19 @@ export default function MetricsPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/60 backdrop-blur-sm fade-in" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-md bg-[#111111] border border-[#1a1a1a] rounded-t-2xl lg:rounded-2xl shadow-2xl slide-up p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md bg-[#111111] border border-[#1a1a1a] rounded-t-2xl lg:rounded-2xl shadow-2xl slide-up p-6 max-lg:pb-safe" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[16px] font-bold text-white">Log Metrics</h3>
               <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center"><X className="w-4 h-4 text-[#777]" /></button>
             </div>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-[12px] text-[#AAA] font-semibold block mb-1">Weight (kg)*</label><input type="number" value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} placeholder="70" className="dark-input" autoFocus /></div>
-                <div><label className="text-[12px] text-[#AAA] font-semibold block mb-1">Height (cm)</label><input type="number" value={form.height} onChange={e => setForm(f => ({ ...f, height: e.target.value }))} placeholder={String(ch)} className="dark-input" /></div>
+                <div><label className="text-[12px] text-[#AAA] font-semibold block mb-1">Weight (kg)*</label><input type="number" inputMode="decimal" min={0} value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} placeholder="70" className="dark-input" autoFocus /></div>
+                <div><label className="text-[12px] text-[#AAA] font-semibold block mb-1">Height (cm)</label><input type="number" inputMode="decimal" min={0} value={form.height} onChange={e => setForm(f => ({ ...f, height: e.target.value }))} placeholder={String(ch)} className="dark-input" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-[12px] text-[#AAA] font-semibold block mb-1">Body Fat %</label><input type="number" value={form.body_fat} onChange={e => setForm(f => ({ ...f, body_fat: e.target.value }))} placeholder="15" className="dark-input" /></div>
-                <div><label className="text-[12px] text-[#AAA] font-semibold block mb-1">Waist (cm)</label><input type="number" value={form.waist} onChange={e => setForm(f => ({ ...f, waist: e.target.value }))} placeholder="80" className="dark-input" /></div>
+                <div><label className="text-[12px] text-[#AAA] font-semibold block mb-1">Body Fat %</label><input type="number" inputMode="decimal" min={0} value={form.body_fat} onChange={e => setForm(f => ({ ...f, body_fat: e.target.value }))} placeholder="15" className="dark-input" /></div>
+                <div><label className="text-[12px] text-[#AAA] font-semibold block mb-1">Waist (cm)</label><input type="number" inputMode="decimal" min={0} value={form.waist} onChange={e => setForm(f => ({ ...f, waist: e.target.value }))} placeholder="80" className="dark-input" /></div>
               </div>
               <button onClick={submit} className="w-full gradient-btn py-3 mt-1">Save Entry</button>
             </div>

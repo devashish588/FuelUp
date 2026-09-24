@@ -1,25 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { getMetrics, addMetric, getLatestMetric } from '@/lib/services/metric-service';
-import { getUserByClerkId } from '@/lib/services/user-service';
-
-async function getDbUser() {
-  const { userId } = await auth();
-  if (!userId) return null;
-  return getUserByClerkId(userId);
-}
+import { getMetrics, addMetric } from '@/lib/services/metric-service';
+import { requireDbUser } from '@/lib/auth/current-user';
+import { bodyMetricSchema } from '@/lib/validation';
+import { toErrorResponse } from '@/lib/errors/app-error';
+import { logger } from '@/lib/logger/logger';
 
 export async function GET() {
-  const user = await getDbUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const metrics = await getMetrics(user.id);
-  return NextResponse.json(metrics);
+  try {
+    const user = await requireDbUser();
+    const metrics = await getMetrics(user.id);
+    return NextResponse.json(metrics);
+  } catch (error) {
+    const { body, status } = toErrorResponse(error, 'metrics');
+    if (status >= 500) logger.error('GET /api/metrics failed', {});
+    return NextResponse.json(body, { status });
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getDbUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const body = await req.json();
-  const metric = await addMetric(user.id, body);
-  return NextResponse.json(metric);
+  try {
+    const user = await requireDbUser();
+    const parsed = bodyMetricSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid body-metric entry. Please check your input.', code: 'BAD_REQUEST' },
+        { status: 400 }
+      );
+    }
+    const metric = await addMetric(user.id, parsed.data);
+    return NextResponse.json(metric);
+  } catch (error) {
+    logger.error('POST /api/metrics failed', {});
+    const { body, status } = toErrorResponse(error, 'body metric');
+    return NextResponse.json(body, { status });
+  }
 }

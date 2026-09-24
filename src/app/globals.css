@@ -42,6 +42,21 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  /* No gray flash on tap (dark UI); focus rings still signal state. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* === REDUCED MOTION (dashboard, charts, heatmap, camera, banners) === */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Scrollbar */
@@ -177,6 +192,16 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cur
 /* === UTILITIES === */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* === SAFE AREA (notches, home indicators; standalone PWA) === */
+@utility pt-safe { padding-top: env(safe-area-inset-top); }
+@utility pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+@utility px-safe {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+/* Full-height rows that must clear the home indicator (bottom nav is separate). */
+@utility mb-safe { margin-bottom: env(safe-area-inset-bottom); }
 
 /* ═══════════════════════════════════════════════════════
    AUTH PAGE — Dynamic Background & Animations

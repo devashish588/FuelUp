@@ -1,21 +1,50 @@
 'use client';
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { FoodItem, FoodLog, MealType } from '@/lib/types';
+import type { DailyNutrition, FavoriteFood, FoodItem, FoodLog, MealType } from '@/lib/types';
 import { FOOD_DATABASE } from '@/lib/constants/food-database';
-import { generateId, toDateString } from '@/lib/utils';
+import { generateId } from '@/lib/utils';
+import { calculateDailyNutrition, calculateMealNutrition, summarizeFoodLogs } from '@/lib/calculations/nutrition';
+import type { MealNutrition } from '@/lib/calculations/nutrition';
+import { withoutKeys } from '@/lib/repositories/base';
+import { searchFoods } from '@/lib/nutrition/food-search';
+import {
+  addFavorite as addFavoriteRow,
+  addFoodLog as addFoodLogRow,
+  listAllFoodLogs,
+  listCustomFoods,
+  listFavorites,
+  removeFavorite as removeFavoriteRow,
+  removeFoodLog as removeFoodLogRow,
+  saveCustomFood,
+  updateFoodLog as updateFoodLogRow,
+} from '@/lib/repositories/nutrition-repository';
+import { writeThrough } from './write-through';
 
 interface CalorieState {
   foodItems: FoodItem[];
   foodLogs: FoodLog[];
+  favorites: FavoriteFood[];
+  ownerId: string | null;
+  ready: boolean;
+  lastError: string | null;
+  load: (ownerId: string) => Promise<void>;
   addFoodItem: (item: Omit<FoodItem, 'id' | 'created_at'>) => FoodItem;
   addFoodLog: (log: Omit<FoodLog, 'id' | 'created_at'>) => void;
   removeFoodLog: (id: string) => void;
+  /** Edit quantity/meal/food of a log; nutrition must be recomputed by the caller. */
+  updateFoodLog: (id: string, updates: Partial<FoodLog>) => void;
+  /** Re-log an entry as new (new id, same snapshot basis). */
+  duplicateFoodLog: (id: string) => void;
   getLogsForDate: (date: string) => FoodLog[];
   getLogsByMealType: (date: string, mealType: MealType) => FoodLog[];
-  getDailySummary: (date: string) => { calories: number; protein_g: number; carbs_g: number; fat_g: number };
+  getDailySummary: (date: string) => { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g: number; sugar_g: number | null; sodium_mg: number | null };
+  getDailyNutrition: (date: string, targets: { calories: number; protein_g: number; carbs_g: number; fat_g: number }) => DailyNutrition;
+  getMealNutrition: (date: string, mealType: MealType) => MealNutrition;
   searchFoodItems: (query: string) => FoodItem[];
   getRecentFoods: () => FoodItem[];
+  getFavoriteFoods: () => FoodItem[];
+  isFavorite: (foodId: string) => boolean;
+  toggleFavorite: (foodId: string) => void;
 }
 
 const initializeFoodItems = (): FoodItem[] =>
@@ -26,59 +55,145 @@ const initializeFoodItems = (): FoodItem[] =>
     created_by: null,
   }));
 
-export const useCalorieStore = create<CalorieState>()(
-  persist(
-    (set, get) => ({
-      foodItems: initializeFoodItems(),
-      foodLogs: [],
+export const useCalorieStore = create<CalorieState>()((set, get) => ({
+  foodItems: initializeFoodItems(),
+  foodLogs: [],
+  favorites: [],
+  ownerId: null,
+  ready: false,
+  lastError: null,
 
-      addFoodItem: (item) => {
-        const newItem: FoodItem = { ...item, id: generateId(), created_at: new Date().toISOString() };
-        set((s) => ({ foodItems: [...s.foodItems, newItem] }));
-        return newItem;
-      },
+  load: async (ownerId) => {
+    if (get().ownerId === ownerId && get().ready) return;
+    set({ ownerId });
+    try {
+      const [customs, logs, favorites] = await Promise.all([
+        listCustomFoods(ownerId),
+        listAllFoodLogs(ownerId),
+        listFavorites(ownerId),
+      ]);
+      set({ foodItems: [...initializeFoodItems(), ...customs], foodLogs: logs, favorites, ready: true, lastError: null });
+    } catch (error) {
+      set({ ready: true, lastError: error instanceof Error ? error.message : 'Unable to load your food logs.' });
+    }
+  },
 
-      addFoodLog: (log) => {
-        const newLog: FoodLog = { ...log, id: generateId(), created_at: new Date().toISOString() };
-        set((s) => ({ foodLogs: [...s.foodLogs, newLog] }));
-      },
+  addFoodItem: (item) => {
+    const newItem: FoodItem = { ...item, id: generateId(), created_at: new Date().toISOString() };
+    set((s) => ({ foodItems: [...s.foodItems, newItem] }));
+    const ownerId = get().ownerId;
+    if (ownerId) {
+      writeThrough(saveCustomFood(ownerId, newItem), 'food', (message) =>
+        set({ lastError: message })
+      );
+    }
+    return newItem;
+  },
 
-      removeFoodLog: (id) =>
-        set((s) => ({ foodLogs: s.foodLogs.filter((l) => l.id !== id) })),
+  addFoodLog: (log) => {
+    const newLog: FoodLog = { ...log, id: generateId(), created_at: new Date().toISOString() };
+    set((s) => ({ foodLogs: [...s.foodLogs, newLog] }));
+    const ownerId = get().ownerId;
+    if (ownerId) {
+      writeThrough(addFoodLogRow(ownerId, newLog), 'food log', (message) =>
+        set({ lastError: message })
+      );
+    }
+  },
 
-      getLogsForDate: (date) =>
-        get().foodLogs.filter((l) => l.date === date),
+  removeFoodLog: (id) => {
+    set((s) => ({ foodLogs: s.foodLogs.filter((l) => l.id !== id) }));
+    const ownerId = get().ownerId;
+    if (ownerId) {
+      writeThrough(removeFoodLogRow(ownerId, id), 'food log', (message) =>
+        set({ lastError: message })
+      );
+    }
+  },
 
-      getLogsByMealType: (date, mealType) =>
-        get().foodLogs.filter((l) => l.date === date && l.meal_type === mealType),
+  updateFoodLog: (id, updates) => {
+    set((s) => ({
+      foodLogs: s.foodLogs.map((l) => (l.id === id ? { ...l, ...updates } : l)),
+    }));
+    const ownerId = get().ownerId;
+    if (ownerId) {
+      writeThrough(updateFoodLogRow(ownerId, id, updates), 'food log', (message) =>
+        set({ lastError: message })
+      );
+    }
+  },
 
-      getDailySummary: (date) => {
-        const logs = get().foodLogs.filter((l) => l.date === date);
-        return logs.reduce(
-          (acc, l) => ({
-            calories: acc.calories + l.calories,
-            protein_g: acc.protein_g + l.protein_g,
-            carbs_g: acc.carbs_g + l.carbs_g,
-            fat_g: acc.fat_g + l.fat_g,
-          }),
-          { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+  duplicateFoodLog: (id) => {
+    const source = get().foodLogs.find((l) => l.id === id);
+    if (!source) return;
+    get().addFoodLog(withoutKeys(source, 'id', 'created_at'));
+  },
+
+  getLogsForDate: (date) => get().foodLogs.filter((l) => l.date === date),
+
+  getLogsByMealType: (date, mealType) =>
+    get().foodLogs.filter((l) => l.date === date && l.meal_type === mealType),
+
+  getDailySummary: (date) => {
+    const logs = get().foodLogs.filter((l) => l.date === date);
+    const base = summarizeFoodLogs(logs);
+    return {
+      ...base,
+      fiber_g: logs.reduce((s, l) => s + (l.fiber_g ?? 0), 0),
+      sugar_g: logs.some((l) => l.sugar_g != null) ? logs.reduce((s, l) => s + (l.sugar_g ?? 0), 0) : null,
+      sodium_mg: logs.some((l) => l.sodium_mg != null) ? logs.reduce((s, l) => s + (l.sodium_mg ?? 0), 0) : null,
+    };
+  },
+
+  getDailyNutrition: (date, targets) =>
+    calculateDailyNutrition(get().foodLogs, date, targets),
+
+  getMealNutrition: (date, mealType) =>
+    calculateMealNutrition(
+      get().foodLogs.filter((l) => l.date === date),
+      mealType
+    ),
+
+  searchFoodItems: (query) => searchFoods(get().foodItems, query).map((s) => s.food),
+
+  getRecentFoods: () => {
+    const logs = get().foodLogs;
+    const items = get().foodItems;
+    const recentIds = [...new Set(logs.slice(-20).map((l) => l.food_item_id))];
+    return recentIds.map((id) => items.find((f) => f.id === id)).filter(Boolean) as FoodItem[];
+  },
+
+  getFavoriteFoods: () => {
+    const items = get().foodItems;
+    const favIds = new Set(get().favorites.map((f) => f.food_id));
+    return items.filter((f) => favIds.has(f.id));
+  },
+
+  isFavorite: (foodId) => get().favorites.some((f) => f.food_id === foodId),
+
+  toggleFavorite: (foodId) => {
+    const ownerId = get().ownerId;
+    const existing = get().favorites.find((f) => f.food_id === foodId);
+    if (existing) {
+      set((s) => ({ favorites: s.favorites.filter((f) => f.id !== existing.id) }));
+      if (ownerId) {
+        writeThrough(removeFavoriteRow(ownerId, existing.id), 'favorite', (message) =>
+          set({ lastError: message })
         );
-      },
-
-      searchFoodItems: (query) => {
-        const q = query.toLowerCase();
-        return get().foodItems.filter(
-          (f) => f.name.toLowerCase().includes(q) || f.brand.toLowerCase().includes(q)
-        ).slice(0, 20);
-      },
-
-      getRecentFoods: () => {
-        const logs = get().foodLogs;
-        const items = get().foodItems;
-        const recentIds = [...new Set(logs.slice(-20).map((l) => l.food_item_id))];
-        return recentIds.map((id) => items.find((f) => f.id === id)).filter(Boolean) as FoodItem[];
-      },
-    }),
-    { name: 'fuelup-calories' }
-  )
-);
+      }
+      return;
+    }
+    const favorite: FavoriteFood = {
+      id: generateId(),
+      user_id: ownerId ?? '',
+      food_id: foodId,
+      created_at: new Date().toISOString(),
+    };
+    set((s) => ({ favorites: [...s.favorites, favorite] }));
+    if (ownerId) {
+      writeThrough(addFavoriteRow(ownerId, favorite), 'favorite', (message) =>
+        set({ lastError: message })
+      );
+    }
+  },
+}));
