@@ -6,6 +6,7 @@
 // record a marker so reruns are no-ops.
 // =============================================
 import type { Table } from 'dexie';
+import { whereOwner } from '@/lib/repositories/base';
 import type { FuelUpLocalDb } from '@/lib/db/local-db';
 import { getLocalDb } from '@/lib/db/local-db';
 import { logger } from '@/lib/logger/logger';
@@ -19,7 +20,7 @@ async function copyTable<T extends { ownerId: string; id: string }>(
   fromOwner: string,
   toOwner: string
 ): Promise<number> {
-  const source = await table.where('ownerId').equals(fromOwner).toArray();
+  const source = await whereOwner(table, fromOwner);
   let copied = 0;
   const batch: T[] = [];
   for (const row of source) {

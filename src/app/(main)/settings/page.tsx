@@ -1,9 +1,10 @@
 'use client';
 import { useState } from 'react';
-import { User, Scale, Target, Settings, Download, Trash2, ChevronRight, Flame, Shield } from 'lucide-react';
+import { User, Scale, Target, Settings, Trash2, ChevronRight, Flame, Shield } from 'lucide-react';
 import { Card, SectionLabel } from '@/components/ui/card';
 import { PageHeader } from '@/components/layout/header';
 import { SyncStatusCard } from '@/components/sync/sync-status-card';
+import { BackupPanel } from '@/components/data/backup-panel';
 import { InstallCard } from '@/components/pwa/install-card';
 import { DiagnosticsCard } from '@/components/pwa/diagnostics-card';
 import { APP_VERSION } from '@/config/app';
@@ -38,29 +39,14 @@ export default function SettingsPage() {
     } else if (editing === 'target_rate_kg_per_week') {
       const trimmed = formValue.trim();
       const rate = trimmed === '' ? null : Math.min(Math.max(parseFloat(trimmed) || 0, 0), 1.5);
+      // Phase 10.5: rate edits are recorded in TargetHistory (old → new).
+      const previousRate = profile.target_rate_kg_per_week;
       setProfile({ target_rate_kg_per_week: rate });
+      if (previousRate !== rate) {
+        useEnergyStore.getState().recordRateChange(previousRate, rate);
+      }
     } else setProfile({ [editing]: formValue });
     setEditing(null);
-  };
-
-  const handleExport = () => {
-    const cal = useCalorieStore.getState();
-    const data = {
-      profile,
-      foods: cal.foodItems,
-      favorites: cal.favorites,
-      calories: cal.foodLogs,
-      recipes: useRecipeStore.getState().recipes,
-      recipeIngredients: useRecipeStore.getState().ingredients,
-      metrics: useMetricsStore.getState().metrics,
-      workouts: useExerciseStore.getState().workouts,
-      habits: useHabitStore.getState().habits,
-      habitLogs: useHabitStore.getState().habitLogs,
-      targetHistory: useEnergyStore.getState().history,
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob); const a = document.createElement('a');
-    a.href = url; a.download = `fuelup-export-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url);
   };
 
   const handleReset = async () => {
@@ -186,22 +172,21 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <SectionLabel>Data</SectionLabel>
+          <SectionLabel>Data &amp; Privacy</SectionLabel>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <SyncStatusCard />
-            <Card onClick={handleExport} interactive>
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[rgba(240,165,0,0.1)] flex items-center justify-center"><Download className="w-4 h-4 text-[#f59e0b]" /></div>
-                <div><span className="text-[14px] font-medium text-white block">Export Data</span><span className="text-[11px] text-[#555]">Download as JSON</span></div>
-              </div>
-            </Card>
+            <BackupPanel />
             <Card onClick={handleReset} interactive>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-[rgba(228,88,38,0.1)] flex items-center justify-center"><Trash2 className="w-4 h-4 text-[#ea580c]" /></div>
-                <div><span className="text-[14px] font-medium text-[#ea580c] block">Reset All Data</span><span className="text-[11px] text-[#555]">Delete everything</span></div>
+                <div><span className="text-[14px] font-medium text-[#ea580c] block">Reset All Data</span><span className="text-[11px] text-[#555]">Delete everything on this device</span></div>
               </div>
             </Card>
           </div>
+          <p className="text-[11px] text-[#555] leading-relaxed mt-2">
+            Export a copy of your FuelUp data before resetting. Resetting deletes local data on
+            this device only — delete your account separately if you want server data removed.
+          </p>
         </div>
 
         <p className="text-[11px] text-[#444] text-center flex items-center justify-center gap-1"><Shield className="w-3 h-3" /> FuelUp v{APP_VERSION} · Data stays on device</p>

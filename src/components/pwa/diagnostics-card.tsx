@@ -3,9 +3,14 @@ import { useEffect, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { APP_VERSION } from '@/config/app';
+import { LOCAL_DB_VERSION } from '@/lib/db/local-schema';
 import { collectLiveDiagnostics, type DeviceDiagnostics } from '@/lib/pwa/diagnostics';
 import { useIsInstalledPWA } from '@/lib/pwa/use-is-installed-pwa';
 import { useSyncStore } from '@/lib/sync/sync-store';
+import { useSessionStore } from '@/lib/session/session-store';
+import { getBackupMeta } from '@/lib/backup/backup';
+import { getSyncCursor } from '@/lib/sync/pull-apply';
+import { countPendingEvents } from '@/lib/sync/outbox';
 
 /**
  * Settings → App → Diagnostics. Read-only capability snapshot for real-device
@@ -18,6 +23,9 @@ export function DiagnosticsCard() {
   const pending = useSyncStore((s) => s.pendingCount);
   const lastSynced = useSyncStore((s) => s.lastSyncedAt);
   const [diag, setDiag] = useState<DeviceDiagnostics>(() => collectLiveDiagnostics());
+  const [outboxPending, setOutboxPending] = useState<number | null>(null);
+  const [cursorSet, setCursorSet] = useState<boolean | null>(null);
+  const [backupMeta] = useState(() => getBackupMeta());
 
   useEffect(() => {
     const refresh = () => setDiag(collectLiveDiagnostics());
@@ -30,15 +38,48 @@ export function DiagnosticsCard() {
     };
   }, []);
 
+  // Phase 10.5: local troubleshooting facts (counts and presence only —
+  // never row contents, never secrets, never cursor values).
+  const ownerId = useSessionStore((s) => s.ownerId);
+  useEffect(() => {
+    let cancelled = false;
+    if (!ownerId) return;
+    void (async () => {
+      try {
+        const [count, cursor] = await Promise.all([
+          countPendingEvents(ownerId),
+          getSyncCursor(ownerId),
+        ]);
+        if (!cancelled) {
+          setOutboxPending(count);
+          setCursorSet(cursor !== null);
+        }
+      } catch {
+        if (!cancelled) {
+          setOutboxPending(null);
+          setCursorSet(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [syncStatus, ownerId]);
+
   const rows: [string, string][] = [
     ['App version', `FuelUp ${APP_VERSION}`],
     ['Platform', `${diag.platform}${diag.mobile ? ' (mobile)' : ''}${installed ? ' · installed' : ''}`],
     ['Network', diag.online ? 'Online' : 'Offline'],
     ['Display mode', diag.standalone ? 'Standalone' : 'Browser tab'],
     ['Service worker', diag.serviceWorker === 'controlled' ? 'Active + controlling' : diag.serviceWorker === 'registered' ? 'Registered' : 'Unsupported'],
-    ['IndexedDB', diag.indexedDb ? 'Available' : 'UNAVAILABLE'],
+    ['IndexedDB', diag.indexedDb ? `Available (v${LOCAL_DB_VERSION})` : 'UNAVAILABLE'],
     ['Camera API', diag.camera ? 'Available' : 'Unavailable'],
     ['Sync', `${syncStatus}${pending > 0 ? ` · ${pending} pending` : ''}${lastSynced ? ` · ${lastSynced}` : ''}`],
+    ['Outbox', outboxPending === null ? '—' : outboxPending === 0 ? 'Empty' : `${outboxPending} pending`],
+    ['Sync cursor', cursorSet === null ? '—' : cursorSet ? 'Set' : 'Not set'],
+    ['Backup', 'Available (local file)'],
+    ['Last export', backupMeta.lastExportAt ?? 'Never'],
+    ['Last import', backupMeta.lastImportAt ?? 'Never'],
   ];
 
   return (

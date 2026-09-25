@@ -3,10 +3,41 @@
 // Shared owner-scoping + error mapping. UI never imports this directly;
 // only repositories and (test) migration code.
 // =============================================
+import type { Table } from 'dexie';
 import type { FuelUpLocalDb } from '@/lib/db/local-db';
 import { getLocalDb, requireIndexedDB } from '@/lib/db/local-db';
 import { AppError, Errors } from '@/lib/errors/app-error';
 import { logger } from '@/lib/logger/logger';
+
+/**
+ * Owner-scoped read that works regardless of declared indexes.
+ *
+ * WARNING: `table.where('ownerId')` silently matches NOTHING on tables
+ * whose schema only declares compound indexes (`[ownerId+date]`, ...).
+ * Always use this helper (or an explicit compound range) instead of
+ * `.where('ownerId')`. Personal-scale collections make the full scan cheap.
+ */
+export async function whereOwner<T>(table: Table<T, string>, ownerId: string): Promise<T[]> {
+  return table
+    .toCollection()
+    .filter((row) => (row as { ownerId?: unknown }).ownerId === ownerId)
+    .toArray();
+}
+
+interface KeyScannable {
+  toCollection(): {
+    filter(fn: (row: { ownerId?: unknown }) => boolean): { primaryKeys(): Promise<unknown[]> };
+  };
+}
+
+/** Primary keys of one owner's rows (for bulkDelete), index-agnostic. */
+export async function whereOwnerKeys(table: KeyScannable, ownerId: string): Promise<string[]> {
+  const keys = await table
+    .toCollection()
+    .filter((row) => row.ownerId === ownerId)
+    .primaryKeys();
+  return keys as string[];
+}
 
 export interface RepoContext {
   db: FuelUpLocalDb;

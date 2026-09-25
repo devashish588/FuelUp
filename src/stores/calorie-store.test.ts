@@ -113,3 +113,27 @@ describe('duplicateFoodLog', () => {
     expect(logs[1]).toMatchObject({ food_item_id: rice, quantity: 180, calories: 234 });
   });
 });
+
+describe('repeat request (Phase 10.5)', () => {
+  it('stores and clears a cross-page repeat intent without logging', async () => {
+    const { repeatRequestFromLog } = await import('./calorie-store');
+    const store = useCalorieStore.getState();
+    store.addFoodLog({ user_id: '', food_item_id: 'f-1', date: '2026-09-22', meal_type: 'dinner', servings: 2, quantity: 200, quantity_unit: 'g', calories: 300, protein_g: 10, carbs_g: 40, fat_g: 5, notes: '' });
+    const log = useCalorieStore.getState().foodLogs[0];
+    // Building the intent logs nothing by itself.
+    expect(useCalorieStore.getState().foodLogs).toHaveLength(1);
+    expect(repeatRequestFromLog(log)).toEqual({ foodItemId: 'f-1', quantity: 200, unit: 'g', meal: 'dinner' });
+    store.requestRepeat(repeatRequestFromLog(log));
+    expect(useCalorieStore.getState().repeatRequest).toMatchObject({ foodItemId: 'f-1', quantity: 200 });
+    store.clearRepeat();
+    expect(useCalorieStore.getState().repeatRequest).toBeNull();
+  });
+
+  it('maps legacy serving-only logs to a serving prefill', async () => {
+    const { repeatRequestFromLog } = await import('./calorie-store');
+    const store = useCalorieStore.getState();
+    store.addFoodLog({ user_id: '', food_item_id: 'f-2', date: '2026-09-22', meal_type: 'lunch', servings: 1.5, calories: 200, protein_g: 5, carbs_g: 20, fat_g: 5, notes: '' });
+    const log = useCalorieStore.getState().foodLogs[0];
+    expect(repeatRequestFromLog(log)).toEqual({ foodItemId: 'f-2', quantity: null, unit: null, meal: 'lunch' });
+  });
+});

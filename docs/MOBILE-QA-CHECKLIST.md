@@ -26,6 +26,11 @@ camera state while testing.
 | A15 | Reconnect | Network back → sync → no duplicates → target/energy state intact | NOT TESTED |
 | A16 | SW update | Deploy → update banner appears → Reload applies without losing draft | NOT TESTED |
 | A17 | Reduced motion | Enable "Remove animations" → no infinite motion | NOT TESTED |
+| A18 | Export | Settings → Data → Export → JSON downloads with all collections | NOT TESTED |
+| A19 | Import | File picker → preview counts → Restore → dashboard/history/analytics rebuilt | NOT TESTED |
+| A20 | Import dialog | Preview readable at 360px; Cancel/Restore reachable with keyboard open | NOT TESTED |
+| A21 | Quick actions | FAB Repeat Last → prefilled review; Log Water +1; no silent logs | NOT TESTED |
+| A22 | Target rate | Settings → Target Rate 0.5 → 0.4 → history shows old/new rates | NOT TESTED |
 
 ## iOS (Safari, Add to Home Screen)
 
@@ -46,12 +51,16 @@ camera state while testing.
 | I13 | Reconnect | Sync without duplicates; energy state reproducible | NOT TESTED |
 | I14 | SW update | Banner → Reload → no lost AI review/camera session (user controls timing) | NOT TESTED |
 | I15 | Safe area | Header/nav/sheets/camera controls clear notch + home indicator | NOT TESTED |
+| I16 | Export | Settings → Data → Export → JSON downloads (Files app) | NOT TESTED |
+| I17 | Import | File picker → preview → Restore → data rebuilt; no duplicates after sync | NOT TESTED |
+| I18 | Quick actions | FAB Repeat Last → prefilled review; Log Water +1; no silent logs | NOT TESTED |
+| I19 | Target rate | Settings → Target Rate change → history records old/new rates | NOT TESTED |
 
 ## Release gates
 
 | Gate | Rule | Status |
 |------|------|--------|
-| Automated | `tsc`, `lint`, `test` (362), `build`, `prisma generate+validate` green | PASS (CI/dev machine) |
+| Automated | `tsc`, `lint`, `test` (392), `build`, `prisma generate+validate` green | PASS (CI/dev machine) |
 | Security audit | `npm audit` reviewed; no production-reachable criticals | PASS (with notes) |
 | PWA | Manifest/icons/SW/offline page valid; no private caching | PASS (automated guards) |
 | Data | Offline + sync safe; export/reset verified | PASS (automated) / device NOT TESTED |

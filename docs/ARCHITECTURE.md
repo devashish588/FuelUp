@@ -473,3 +473,42 @@ covers all collections, never secrets. `APP_VERSION` (config/app.ts) is
 pinned to package.json by test and shown in Settings + diagnostics.
 Release gates: automated + build + security + PWA + data pass; real-device
 mobile gate outstanding (`docs/MOBILE-QA-CHECKLIST.md`).
+
+## 17. Daily-use completion (Phase 10.5)
+
+Small safety/convenience close-out — no new product surface beyond it.
+
+- **Owner scoping rule (binding)**: `table.where('ownerId')` silently
+  matches NOTHING on tables whose schema declares only compound indexes
+  (`foodLogs`, `habitLogs`, `outbox`). All owner-scoped reads/deletes go
+  through `whereOwner`/`whereOwnerKeys` (repositories/base) or an explicit
+  compound range. This fixed real bugs: Settings Reset and device→user
+  carryover previously skipped food logs, habit logs, and outbox rows.
+- **Backup/restore** (`lib/backup` + `validation/backup`): versioned
+  `fuelup-backup` JSON (format/version/exportedAt/appVersion + 14
+  collections + profile + weekly plan; derived analytics never stored).
+  Export strips identity and self-validates; browser download only, never
+  uploaded. Import: 10 MB cap → JSON → envelope → version → entity Zod →
+  preview counts → explicit confirm → ONE Dexie transaction (clear owner
+  namespace incl. stale outbox, keep sync cursor, bulk-put remapped rows
+  chunked without macrotask yields). IDs preserved; foreign-id collisions
+  skipped + reported (never clobbered). Restore is local-only; normal
+  incremental sync resumes afterward.
+- **Target-rate history**: `TargetHistory` carries nullable
+  `previous/new_rate_kg_per_week` (Prisma + sync whitelists extended);
+  settings rate edits append `target_rate_changed` events via
+  `energy-store.recordRateChange` (identical resubmits ignored); the
+  deriver compares the last rated entry against the effective rate so the
+  `rateChanged` explanation fires. Manual target edits still pause
+  adaptation with history intact (unchanged).
+- **Quick actions**: dashboard FAB gains Repeat Last (prefill intent via
+  calorie-store `repeatRequest`, consumed once by the food modal) and Log
+  Water (existing Water habit +1 via `logHabit`); Recent/recipe rows gain
+  Repeat buttons prefilling food + last quantity/unit/meal. Review-before-
+  Add is mandatory everywhere — intents never log by themselves. All flow
+  Zustand → repo → outbox (offline-safe, PWA-identical).
+- **Settings/Data**: versioned Export/Import panel with preview, staged
+  progress, and safety copy ("backup stays on your device; restore
+  replaces local data"); reset guidance text. Diagnostics adds DB version,
+  backup availability, last export/import, outbox count, and cursor state
+  (counts/presence only — no contents, no secrets).

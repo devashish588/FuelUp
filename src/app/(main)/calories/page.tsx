@@ -1,12 +1,12 @@
 'use client';
-import { useState, useMemo } from 'react';
-import { Plus, ChevronLeft, ChevronRight, Search, X, Clock, Sunrise, Sun, Moon, Coffee, Flame, Apple, Star, Pencil, Copy, ChefHat, Sparkles } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Plus, ChevronLeft, ChevronRight, Search, X, Clock, Sunrise, Sun, Moon, Coffee, Flame, Apple, Star, Pencil, Copy, ChefHat, Sparkles, Repeat } from 'lucide-react';
 import { Card, SectionLabel, StatNumber, ProgressBar, EmptyState } from '@/components/ui/card';
 import { PageHeader } from '@/components/layout/header';
 import { RecipeBuilderModal } from '@/components/nutrition/recipe-builder';
 import { AiFoodLogger } from '@/components/nutrition/ai-food-logger';
 import { TargetBasisLabel } from '@/components/nutrition/target-basis-label';
-import { useCalorieStore } from '@/stores/calorie-store';
+import { useCalorieStore, repeatRequestFromLog, type RepeatRequest } from '@/stores/calorie-store';
 import { useRecipeStore } from '@/stores/recipe-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { toDateString, formatDate, cn } from '@/lib/utils';
@@ -41,6 +41,19 @@ export default function CaloriesPage() {
 
   const openAdd = (m: MealType) => { setEditing(null); setMeal(m); setModal(true); };
   const openEdit = (log: FoodLog) => { setEditing(log); setMeal(log.meal_type); setModal(true); };
+  // Phase 10.5: cross-page repeat intent (dashboard "Repeat Last").
+  const [repeat, setRepeat] = useState<RepeatRequest | null>(null);
+  useEffect(() => {
+    if (!modal) return;
+    const pending = useCalorieStore.getState().repeatRequest;
+    if (pending) {
+      // One-shot intent consume per modal open (dashboard "Repeat Last").
+      // No render loop: the store value is cleared synchronously here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRepeat(pending);
+      useCalorieStore.getState().clearRepeat();
+    }
+  }, [modal]);
 
   return (
     <div>
@@ -154,7 +167,7 @@ export default function CaloriesPage() {
           </div>
         </div>
       </div>
-      {modal && <AddModal meal={meal} date={date} editing={editing} onClose={() => { setModal(false); setEditing(null); }} onMealChange={setMeal} />}
+      {modal && <AddModal meal={meal} date={date} editing={editing} repeat={repeat} onRepeatConsumed={() => setRepeat(null)} onClose={() => { setModal(false); setEditing(null); setRepeat(null); }} onMealChange={setMeal} />}
     </div>
   );
 }
@@ -166,8 +179,9 @@ function describeLogQuantity(log: FoodLog): string {
 
 type Tab = 'search' | 'manual' | 'recent' | 'favorites' | 'recipes' | 'ai';
 
-function AddModal({ meal, date, editing, onClose, onMealChange }: {
-  meal: MealType; date: string; editing: FoodLog | null; onClose: () => void; onMealChange: (m: MealType) => void;
+function AddModal({ meal, date, editing, repeat, onRepeatConsumed, onClose, onMealChange }: {
+  meal: MealType; date: string; editing: FoodLog | null; repeat: RepeatRequest | null;
+  onRepeatConsumed: () => void; onClose: () => void; onMealChange: (m: MealType) => void;
 }) {
   const {
     searchFoodItems, addFoodLog, addFoodItem, getRecentFoods,
@@ -205,6 +219,21 @@ function AddModal({ meal, date, editing, onClose, onMealChange }: {
     }
     return map;
   }, [foodLogs]);
+  // Latest full log per food for Phase 10.5 repeat prefill.
+  const latestLogByFood = useMemo(() => {
+    const map = new Map<string, FoodLog>();
+    for (const l of foodLogs) {
+      const prev = map.get(l.food_item_id);
+      if (!prev || l.date > prev.date || (l.date === prev.date && l.created_at > prev.created_at)) {
+        map.set(l.food_item_id, l);
+      }
+    }
+    return map;
+  }, [foodLogs]);
+  const repeatFromLog = (log: FoodLog | undefined) => {
+    if (!log) return;
+    applyRepeat(repeatRequestFromLog(log));
+  };
   const recipeItems = useMemo(
     () => foodItems.filter((f) => f.source === 'recipe'),
     [foodItems]
@@ -232,6 +261,31 @@ function AddModal({ meal, date, editing, onClose, onMealChange }: {
     setFormError(null);
     setTab('search');
   };
+
+  // Phase 10.5: repeat prefill — food + last quantity/unit/meal go into the
+  // form for REVIEW. Nothing is logged until the user taps Add.
+  const applyRepeat = (req: RepeatRequest) => {
+    const food = foodItems.find((f) => f.id === req.foodItemId) ?? null;
+    if (!food) {
+      setFormError('Original food unavailable — pick again.');
+      setTab('search');
+      return;
+    }
+    setPicked(food);
+    setQty(req.quantity != null ? String(req.quantity) : String(food.serving_size));
+    setUnit(req.unit ?? defaultUnitFor(food));
+    onMealChange(req.meal);
+    setFormError(null);
+    setTab('search');
+  };
+  useEffect(() => {
+    if (repeat) {
+      applyRepeat(repeat);
+      onRepeatConsumed();
+    }
+    // Consume once per modal open (repeat identity is stable per request).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repeat]);
 
   const submit = () => {
     if (!picked) return;
@@ -497,7 +551,13 @@ function AddModal({ meal, date, editing, onClose, onMealChange }: {
             <button onClick={createManualFood} className="w-full gradient-btn py-3">Save to My Foods</button>
           </div>)}
           {tab === 'recent' && !picked && (<div>{rec.length === 0 ? <p className="text-center text-[13px] text-[#555] py-8">No recent foods.</p> : rec.map(fd => (
-            <button key={fd.id} onClick={() => pickFood(fd)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-[#1a1a1a] text-left mb-1"><div className="min-w-0"><div className="text-[14px] font-medium text-[#EEE] truncate">{estimatePrefix(fd.is_estimated)}{fd.name}</div><div className="text-[11px] text-[#555]">{fd.calories_per_serving} kcal</div></div><Clock className="w-4 h-4 text-[#444] shrink-0" /></button>))}</div>)}
+            <div key={fd.id} className="w-full flex items-center gap-1 p-1 rounded-xl hover:bg-[#1a1a1a] mb-1">
+              <button onClick={() => pickFood(fd)} className="flex-1 min-w-0 flex items-center justify-between p-2 rounded-xl text-left"><div className="min-w-0"><div className="text-[14px] font-medium text-[#EEE] truncate">{estimatePrefix(fd.is_estimated)}{fd.name}</div><div className="text-[11px] text-[#555]">{fd.calories_per_serving} kcal</div></div><Clock className="w-4 h-4 text-[#444] shrink-0" /></button>
+              <button onClick={() => repeatFromLog(latestLogByFood.get(fd.id))} aria-label={`Repeat ${fd.name}`} title="Repeat with last quantity"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-[#777] hover:text-white shrink-0">
+                <Repeat className="w-4 h-4" />
+              </button>
+            </div>))}</div>)}
           {tab === 'favorites' && !picked && (<div>{favs.length === 0 ? <p className="text-center text-[13px] text-[#555] py-8">No saved foods yet — tap ☆ on any food.</p> : favs.map(fd => (
             <button key={fd.id} onClick={() => pickFood(fd)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-[#1a1a1a] text-left mb-1"><div className="min-w-0"><div className="text-[14px] font-medium text-[#EEE] truncate">{estimatePrefix(fd.is_estimated)}{fd.name}</div><div className="text-[11px] text-[#555]">{fd.calories_per_serving} kcal</div></div><Star className="w-4 h-4 text-[#f59e0b] fill-[#f59e0b] shrink-0" /></button>))}</div>)}
           {tab === 'recipes' && !picked && (
@@ -529,6 +589,11 @@ function AddModal({ meal, date, editing, onClose, onMealChange }: {
                         <ChefHat className="w-4 h-4 text-[#f59e0b] shrink-0" />
                       </button>
                       <div className="flex items-center gap-1 mt-1">
+                        {latestLogByFood.get(r.id) && (
+                          <button onClick={() => repeatFromLog(latestLogByFood.get(r.id))} aria-label={`Repeat ${r.name}`} className="min-h-[44px] px-2 flex items-center gap-1 text-[11px] font-semibold text-[#777]">
+                            <Repeat className="w-3.5 h-3.5" /> Repeat
+                          </button>
+                        )}
                         <button onClick={() => toggleFavorite(r.id)} aria-label={fav ? `Unsave ${r.name}` : `Save ${r.name}`} className="min-h-[44px] px-2 flex items-center gap-1 text-[11px] font-semibold text-[#777]">
                           <Star className={cn('w-3.5 h-3.5', fav ? 'text-[#f59e0b] fill-[#f59e0b]' : 'text-[#555]')} />
                           {fav ? 'Saved' : 'Save'}

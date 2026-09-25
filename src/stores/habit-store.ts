@@ -34,6 +34,18 @@ interface HabitState {
   getHabitLogsInRange: (habitId: string, startDate: string, endDate: string) => HabitLog[];
 }
 
+/**
+ * Phase 10.5: locate the water habit for one-tap logging. Prefers an
+ * explicit "Water" habit, falls back to the first glasses-unit habit.
+ * Pure — the existing habit/log/outbox path does the persistence.
+ */
+export function findWaterHabit(habits: Habit[]): Habit | undefined {
+  return (
+    habits.find((h) => h.name.toLowerCase() === 'water') ??
+    habits.find((h) => h.unit.toLowerCase() === 'glasses')
+  );
+}
+
 function defaultHabits(): Habit[] {
   const now = new Date().toISOString();
   return DEFAULT_HABITS.map((h, i) => ({

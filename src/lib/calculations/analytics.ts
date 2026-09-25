@@ -224,7 +224,12 @@ export function deriveEnergyState(input: EnergyDerivationInput): EnergyState {
     previousAvgIntake: prevIntake,
     avgIntake: maintenance.averageIntakeKcal,
     goalChanged: lastChange ? lastChange.goal !== profile.goal : false,
-    rateChanged: false,
+    // Phase 10.5: the most recent rate-bearing entry vs the current
+    // effective rate. Older entries predate rate fields (null) → false.
+    rateChanged: (() => {
+      const lastRated = sortedHistory.find((h) => h.new_rate_kg_per_week !== null);
+      return lastRated ? lastRated.new_rate_kg_per_week !== rateKgPerWeek : false;
+    })(),
     activated: updateDue && sortedHistory.length === 0,
   });
 

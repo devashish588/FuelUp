@@ -1,6 +1,6 @@
 'use client';
 import { create } from 'zustand';
-import type { DailyNutrition, FavoriteFood, FoodItem, FoodLog, MealType } from '@/lib/types';
+import type { DailyNutrition, FavoriteFood, FoodItem, FoodLog, MealType, QuantityUnit } from '@/lib/types';
 import { FOOD_DATABASE } from '@/lib/constants/food-database';
 import { generateId } from '@/lib/utils';
 import { calculateDailyNutrition, calculateMealNutrition, summarizeFoodLogs } from '@/lib/calculations/nutrition';
@@ -45,6 +45,32 @@ interface CalorieState {
   getFavoriteFoods: () => FoodItem[];
   isFavorite: (foodId: string) => boolean;
   toggleFavorite: (foodId: string) => void;
+  /**
+   * Phase 10.5: cross-page repeat intent (dashboard "Repeat Last" → food
+   * modal prefill). In-memory only, consumed once by the calories page.
+   * Review-before-save is mandatory — this never logs by itself.
+   */
+  repeatRequest: RepeatRequest | null;
+  requestRepeat: (request: RepeatRequest) => void;
+  clearRepeat: () => void;
+}
+
+/** Prefill for repeating a previous log (food + quantity + meal). */
+export interface RepeatRequest {
+  foodItemId: string;
+  quantity: number | null;
+  unit: QuantityUnit | null;
+  meal: MealType;
+}
+
+/** Build a repeat prefill from a previous log (pure; review still required). */
+export function repeatRequestFromLog(log: FoodLog): RepeatRequest {
+  return {
+    foodItemId: log.food_item_id,
+    quantity: log.quantity ?? null,
+    unit: log.quantity_unit ?? null,
+    meal: log.meal_type,
+  };
 }
 
 const initializeFoodItems = (): FoodItem[] =>
@@ -62,6 +88,9 @@ export const useCalorieStore = create<CalorieState>()((set, get) => ({
   ownerId: null,
   ready: false,
   lastError: null,
+  repeatRequest: null,
+  requestRepeat: (request) => set({ repeatRequest: request }),
+  clearRepeat: () => set({ repeatRequest: null }),
 
   load: async (ownerId) => {
     if (get().ownerId === ownerId && get().ready) return;

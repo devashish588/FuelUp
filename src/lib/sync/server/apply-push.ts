@@ -332,6 +332,8 @@ async function applyTargetHistory(tx: Tx, userId: string, p: Record<string, unkn
     confidence: p.confidence === 'high' || p.confidence === 'medium' || p.confidence === 'low' ? (p.confidence as string) : null,
     goal: VALID_GOALS.includes(p.goal as string) ? (p.goal as string) : 'recomp',
     avgIntakeKcal: typeof p.avg_intake_kcal === 'number' ? Math.round(p.avg_intake_kcal) : null,
+    previousRateKgPerWeek: typeof p.previous_rate_kg_per_week === 'number' ? p.previous_rate_kg_per_week : null,
+    newRateKgPerWeek: typeof p.new_rate_kg_per_week === 'number' ? p.new_rate_kg_per_week : null,
   };
   await tx.targetHistory.upsert({
     where: { id: p.id },

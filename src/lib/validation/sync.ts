@@ -193,6 +193,8 @@ const syncTargetHistoryPayload = z.object({
   confidence: z.enum(['high', 'medium', 'low']).nullable().optional(),
   goal: z.enum(['cut', 'bulk', 'recomp', 'maintain', 'custom']).nullable().optional(),
   avg_intake_kcal: z.number().int().min(0).max(15000).nullable().optional(),
+  previous_rate_kg_per_week: z.number().finite().min(0).max(1.5).nullable().optional(),
+  new_rate_kg_per_week: z.number().finite().min(0).max(1.5).nullable().optional(),
 }).passthrough();
 
 export const SYNC_PAYLOAD_SCHEMAS = {

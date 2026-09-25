@@ -423,7 +423,7 @@ describe('sync engine', () => {
     const { saveProfile } = await import('@/lib/repositories/profile-repository');
     const { addFoodLog, listAllFoodLogs } = await import('@/lib/repositories/nutrition-repository');
     const { saveMetricForDate, listMetrics } = await import('@/lib/repositories/metrics-repository');
-    const { listTargetHistory } = await import('@/lib/repositories/target-history-repository');
+    const { listTargetHistory, saveTargetHistory } = await import('@/lib/repositories/target-history-repository');
     const { getProfile } = await import('@/lib/repositories/profile-repository');
     const { deriveEnergyState } = await import('@/lib/calculations/analytics');
     const now = new Date().toISOString();
@@ -459,11 +459,25 @@ describe('sync engine', () => {
         arms_cm: null, thighs_cm: null, notes: '', created_at: now,
       }, dbA);
     }
+    // A rate-change history entry rides along (Phase 10.5 fields included).
+    await saveTargetHistory(o, {
+      id: 'th-rate', user_id: o, date: day(2), previous_target: 2500, new_target: 2500,
+      reason: 'Target rate changed (0.5 kg/week → 0.4 kg/week).',
+      maintenance_estimate: null, valid_days: 0, confidence: 'low', goal: 'cut',
+      avg_intake_kcal: null, previous_rate_kg_per_week: 0.5, new_rate_kg_per_week: 0.4,
+      created_at: now,
+    }, dbA);
     const pushed = await syncNow({}, dbA);
-    expect(pushed.pushed).toBe(1 + 16 + 6);
+    expect(pushed.pushed).toBe(1 + 16 + 6 + 1);
 
     // Device B pulls everything, then derives the same estimate as A.
     await syncNow({}, dbB);
+    const historyB = await listTargetHistory(o, dbB);
+    expect(historyB).toHaveLength(1);
+    expect(historyB[0]).toMatchObject({
+      previous_rate_kg_per_week: 0.5, new_rate_kg_per_week: 0.4,
+      reason: 'Target rate changed (0.5 kg/week → 0.4 kg/week).',
+    });
     const derive = async (db: typeof dbA) => {
       const p = await getProfile(o, db);
       if (!p) throw new Error('missing profile');
@@ -496,7 +510,8 @@ describe('sync engine', () => {
     expect(stateB2.weightObservations).toBe(7);
     expect(stateA2.weightObservations).toBe(7);
     expect(stateA2.maintenance?.estimate).toBe(stateB2.maintenance?.estimate);
-    // History rows are raw facts too: an applied target is visible on both.
-    expect(stateA2.lastChange).toBeNull();
+    // History rows are raw facts too: the rate entry is visible on both.
+    expect(stateA2.lastChange).toMatchObject({ id: 'th-rate', new_rate_kg_per_week: 0.4 });
+    expect(stateB2.lastChange).toMatchObject({ id: 'th-rate', new_rate_kg_per_week: 0.4 });
   });
 });

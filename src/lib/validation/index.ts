@@ -10,3 +10,4 @@ export * from './habit';
 export * from './workout';
 export * from './recipe';
 export * from './sync';
+export * from './backup';

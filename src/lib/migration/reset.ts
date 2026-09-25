@@ -4,15 +4,16 @@
 // Used by Settings → Reset. Never called automatically.
 // =============================================
 import { STORAGE_KEYS } from '@/config/app';
+import { whereOwnerKeys } from '@/lib/repositories/base';
 import type { FuelUpLocalDb } from '@/lib/db/local-db';
 import { getLocalDb } from '@/lib/db/local-db';
 import { logger } from '@/lib/logger/logger';
 
 async function deleteWhereOwner(
-  table: { where(o: string): { equals(v: string): { primaryKeys(): Promise<string[]> } }; bulkDelete(k: string[]): Promise<unknown> },
+  table: Parameters<typeof whereOwnerKeys>[0] & { bulkDelete(k: string[]): Promise<unknown> },
   ownerId: string
 ): Promise<void> {
-  const keys = await table.where('ownerId').equals(ownerId).primaryKeys();
+  const keys = await whereOwnerKeys(table, ownerId);
   if (keys.length > 0) await table.bulkDelete(keys);
 }
 

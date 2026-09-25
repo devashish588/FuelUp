@@ -25,6 +25,8 @@ function entry(id: string, overrides: Partial<TargetHistory> = {}): TargetHistor
     confidence: 'high',
     goal: 'cut',
     avg_intake_kcal: 2700,
+    previous_rate_kg_per_week: null,
+    new_rate_kg_per_week: null,
     created_at: new Date().toISOString(),
     ...overrides,
   };

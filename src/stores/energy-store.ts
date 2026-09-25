@@ -26,6 +26,12 @@ interface EnergyStoreState {
    * Historical food logs are never touched.
    */
   applyAdaptiveTarget: () => { ok: true; target: number } | { ok: false; reason: string };
+  /**
+   * Phase 10.5: record an explicit weekly-rate change (settings edit) as a
+   * TargetHistory event. The calorie target itself is unchanged; only the
+   * rate moved. Uses the existing TargetHistory mechanism — no second system.
+   */
+  recordRateChange: (previousRate: number | null, newRate: number | null) => void;
   reset: () => void;
 }
 
@@ -101,6 +107,8 @@ export const useEnergyStore = create<EnergyStoreState>()((set, get) => ({
       confidence: derived.confidence.overall,
       goal: profile.goal,
       avg_intake_kcal: derived.maintenance.averageIntakeKcal,
+      previous_rate_kg_per_week: null,
+      new_rate_kg_per_week: null,
       created_at: now,
     };
     set((s) => ({ history: [...s.history, entry] }));
@@ -109,6 +117,36 @@ export const useEnergyStore = create<EnergyStoreState>()((set, get) => ({
     );
     get().refresh();
     return { ok: true, target };
+  },
+
+  recordRateChange: (previousRate, newRate) => {
+    const ownerId = get().ownerId;
+    const profile = useProfileStore.getState().profile;
+    if (!ownerId || !profile) return;
+    if (previousRate === newRate) return;
+    const fmt = (r: number | null) => (r === null ? 'goal default' : `${r} kg/week`);
+    const now = new Date().toISOString();
+    const entry: TargetHistory = {
+      id: generateId(),
+      user_id: ownerId,
+      date: now.split('T')[0],
+      previous_target: profile.daily_calorie_target,
+      new_target: profile.daily_calorie_target,
+      reason: `Target rate changed (${fmt(previousRate)} → ${fmt(newRate)}).`,
+      maintenance_estimate: null,
+      valid_days: 0,
+      confidence: get().state?.confidence.overall ?? 'low',
+      goal: profile.goal,
+      avg_intake_kcal: null,
+      previous_rate_kg_per_week: previousRate,
+      new_rate_kg_per_week: newRate,
+      created_at: now,
+    };
+    set((s) => ({ history: [...s.history, entry] }));
+    writeThrough(saveTargetHistory(ownerId, entry), 'target history', (message) =>
+      set({ lastError: message })
+    );
+    get().refresh();
   },
 
   reset: () => set({ state: null, history: [], ownerId: null, ready: false, lastError: null }),

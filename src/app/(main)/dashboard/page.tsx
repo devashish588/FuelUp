@@ -1,14 +1,14 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { Plus, Flame, Dumbbell, Scale, UtensilsCrossed, Target, Zap, ChevronRight } from 'lucide-react';
+import { Plus, Flame, Dumbbell, Scale, UtensilsCrossed, Target, Zap, ChevronRight, History, Droplets } from 'lucide-react';
 import { Card, SectionLabel, StatNumber, ProgressBar, EmptyState, InsightCard } from '@/components/ui/card';
 import { WeightTrend } from '@/components/charts/weight-trend';
 import { TargetBasisLabel } from '@/components/nutrition/target-basis-label';
 import { useProfileStore } from '@/stores/profile-store';
 import { useEnergyStore } from '@/stores/energy-store';
-import { useCalorieStore } from '@/stores/calorie-store';
+import { useCalorieStore, repeatRequestFromLog } from '@/stores/calorie-store';
 import { useMetricsStore } from '@/stores/metrics-store';
-import { useHabitStore } from '@/stores/habit-store';
+import { useHabitStore, findWaterHabit } from '@/stores/habit-store';
 import { useExerciseStore } from '@/stores/exercise-store';
 import { toDateString, formatDate, cn } from '@/lib/utils';
 import { useState, useMemo } from 'react';
@@ -28,6 +28,27 @@ export default function DashboardPage() {
   const workouts = useExerciseStore(s => s.workouts);
 
   const today = toDateString();
+
+  // Phase 10.5 quick actions (all offline-first: Zustand → repo → outbox).
+  // Repeat Last only PREFILLS the food modal — review before Add is mandatory.
+  const repeatLastMeal = () => {
+    const last = [...foodLogs].sort((a, b) =>
+      a.date < b.date ? 1 : a.date > b.date ? -1 : a.created_at < b.created_at ? 1 : -1
+    )[0];
+    if (last) {
+      useCalorieStore.getState().requestRepeat(repeatRequestFromLog(last));
+    }
+    router.push('/calories');
+  };
+  const logWaterGlass = () => {
+    const water = findWaterHabit(habits);
+    if (!water) {
+      router.push('/habits');
+      return;
+    }
+    const current = getLogForHabit(water.id, today)?.value ?? 0;
+    useHabitStore.getState().logHabit(water.id, today, current + 1);
+  };
   const sum = getDailySummary(today);
   const target = profile?.daily_calorie_target || 2000;
   const remaining = Math.max(target - Math.round(sum.calories), 0);
@@ -302,11 +323,13 @@ export default function DashboardPage() {
         {fabOpen && (
           <div className="absolute bottom-16 right-0 flex flex-col gap-2 items-end fade-in">
             {[
-              { label: 'Log Food', icon: UtensilsCrossed, path: '/calories' },
-              { label: 'Start Workout', icon: Dumbbell, path: '/exercise' },
-              { label: 'Log Weight', icon: Scale, path: '/metrics' },
-            ].map(({ label, icon: Icon, path }) => (
-              <button key={label} onClick={() => { router.push(path); setFabOpen(false); }}
+              { label: 'Log Food', icon: UtensilsCrossed, onTap: () => router.push('/calories') },
+              { label: 'Repeat Last', icon: History, onTap: () => repeatLastMeal() },
+              { label: 'Log Water', icon: Droplets, onTap: () => logWaterGlass() },
+              { label: 'Start Workout', icon: Dumbbell, onTap: () => router.push('/exercise') },
+              { label: 'Log Weight', icon: Scale, onTap: () => router.push('/metrics') },
+            ].map(({ label, icon: Icon, onTap }) => (
+              <button key={label} onClick={() => { onTap(); setFabOpen(false); }}
                 className="flex items-center gap-2.5 bg-[#161616] border border-[#2a2a2a] rounded-xl pl-4 pr-3 py-2.5 hover:bg-[#1a1a1a] hover:border-[#333] transition-all shadow-xl active:scale-95">
                 <span className="text-[12px] font-semibold text-[#eee]">{label}</span>
                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#f59e0b] to-[#ea580c] flex items-center justify-center">

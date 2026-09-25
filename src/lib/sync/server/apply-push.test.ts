@@ -279,11 +279,13 @@ describe('applyPushEvents', () => {
         id: 'th-1', date: '2026-09-22', previous_target: 2500, new_target: 2650,
         reason: 'Estimated maintenance rose.', maintenance_estimate: 3200,
         valid_days: 21, confidence: 'high', goal: 'cut', avg_intake_kcal: 2700,
+        previous_rate_kg_per_week: 0.5, new_rate_kg_per_week: 0.4,
       },
     };
     expect((await applyPushEvents(USER_A, [evt], prisma))[0].status).toBe('ok');
     expect(db.targetHistory.rows.get('th-1')).toMatchObject({
       userId: USER_A, previousTarget: 2500, newTarget: 2650, goal: 'cut', validDays: 21,
+      previousRateKgPerWeek: 0.5, newRateKgPerWeek: 0.4,
     });
     // Replay → duplicate.
     expect((await applyPushEvents(USER_A, [evt], prisma))[0].status).toBe('duplicate');

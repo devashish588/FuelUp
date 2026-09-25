@@ -152,7 +152,9 @@ describe('deriveEnergyState — update cadence and stepping', () => {
     const recent: TargetHistory = {
       id: 'th-1', user_id: 'u-1', date: dateBack(3), previous_target: 2500, new_target: 2600,
       reason: 'r', maintenance_estimate: 2950, valid_days: 21, confidence: 'high',
-      goal: 'cut', avg_intake_kcal: 2400, created_at: new Date().toISOString(),
+      goal: 'cut', avg_intake_kcal: 2400,
+      previous_rate_kg_per_week: null, new_rate_kg_per_week: null,
+      created_at: new Date().toISOString(),
     };
     const held = deriveEnergyState({
       profile: profile({ daily_calorie_target: 2600, target_source: 'adaptive' }),
@@ -177,6 +179,62 @@ describe('deriveEnergyState — update cadence and stepping', () => {
       foodLogs: logs, metrics, history: [], today: TODAY,
     });
     expect(settled.updateDue).toBe(false);
+  });
+
+  it('keeps manual edits paused with history intact (Phase 10.5)', () => {
+    const { logs, metrics } = fixture(2400, 82, 80);
+    const manual = deriveEnergyState({
+      profile: profile({ daily_calorie_target: 2300, target_source: 'manual' }),
+      foodLogs: logs, metrics, history: [], today: TODAY,
+    });
+    expect(manual.mode).toBe('adaptive');
+    expect(manual.updateDue).toBe(false);
+    expect(manual.steppedTarget).toBeNull();
+  });
+});
+
+describe('deriveEnergyState — target rate changes (Phase 10.5)', () => {
+  function rateEntry(newRate: number | null): TargetHistory {
+    return {
+      id: 'th-rate', user_id: 'u-1', date: dateBack(10), previous_target: 2500, new_target: 2500,
+      reason: 'Target rate changed (0.5 kg/week → 0.4 kg/week).',
+      maintenance_estimate: null, valid_days: 0, confidence: 'low',
+      goal: 'cut', avg_intake_kcal: null,
+      previous_rate_kg_per_week: 0.5, new_rate_kg_per_week: newRate,
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  it('detects a rate change from stored rate history', () => {
+    const { logs, metrics } = fixture(2400, 82, 80);
+    // Profile still on the goal default (0.5 for cut); last entry recorded 0.4.
+    const s = deriveEnergyState({
+      profile: profile({ target_rate_kg_per_week: null }),
+      foodLogs: logs, metrics, history: [rateEntry(0.4)], today: TODAY,
+    });
+    expect(s.explanation.reasons.some((r) => r.includes('weekly target rate changed'))).toBe(true);
+  });
+
+  it('stays quiet when the recorded rate matches the current rate', () => {
+    const { logs, metrics } = fixture(2400, 82, 80);
+    const s = deriveEnergyState({
+      profile: profile({ target_rate_kg_per_week: null }),
+      foodLogs: logs, metrics, history: [rateEntry(0.5)], today: TODAY,
+    });
+    expect(s.explanation.reasons.some((r) => r.includes('weekly target rate changed'))).toBe(false);
+  });
+
+  it('ignores pre-rate history entries without crashing', () => {
+    const { logs, metrics } = fixture(2400, 82, 80);
+    const legacy: TargetHistory = {
+      ...rateEntry(null),
+      previous_rate_kg_per_week: null,
+      new_rate_kg_per_week: null,
+    };
+    const s = deriveEnergyState({
+      profile: profile(), foodLogs: logs, metrics, history: [legacy], today: TODAY,
+    });
+    expect(s.explanation.reasons.some((r) => r.includes('weekly target rate changed'))).toBe(false);
   });
 });
 

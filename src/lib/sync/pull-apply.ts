@@ -237,6 +237,8 @@ async function applyRow(
             ? row.goal
             : 'recomp',
         avg_intake_kcal: typeof row.avgIntakeKcal === 'number' ? row.avgIntakeKcal : null,
+        previous_rate_kg_per_week: typeof row.previousRateKgPerWeek === 'number' ? row.previousRateKgPerWeek : null,
+        new_rate_kg_per_week: typeof row.newRateKgPerWeek === 'number' ? row.newRateKgPerWeek : null,
         created_at: str(row.createdAt, nowIsoFallback()),
       });
       return true;

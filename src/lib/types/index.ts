@@ -361,5 +361,8 @@ export interface TargetHistory {
   goal: GoalType;
   /** Average valid-day intake (kcal) behind the change, if adaptive. */
   avg_intake_kcal: number | null;
+  /** Phase 10.5: weekly target rate before/after a rate change (null when N/A). */
+  previous_rate_kg_per_week: number | null;
+  new_rate_kg_per_week: number | null;
   created_at: string;
 }
