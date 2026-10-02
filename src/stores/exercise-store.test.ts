@@ -115,3 +115,74 @@ describe('set logging regression (Wiki MVP)', () => {
     expect(remaining[0].exercise_id).toBe('ex-1');
   });
 });
+
+describe('getExerciseSessions selector (progressive overload)', () => {
+  function finishedWorkout(id: string, date: string, exerciseId: string, sets: { weight_kg: number | null; reps: number | null }[]) {
+    return {
+      id,
+      user_id: 'u',
+      name: 'W',
+      date,
+      start_time: `${date}T10:00:00.000Z`,
+      end_time: `${date}T11:00:00.000Z`,
+      duration_minutes: 60,
+      calories_burned: null,
+      notes: '',
+      exercises: [
+        {
+          id: `we-${id}`,
+          workout_id: id,
+          exercise_id: exerciseId,
+          sort_order: 0,
+          notes: '',
+          sets: sets.map((s, i) => ({
+            id: `s-${id}-${i}`,
+            workout_exercise_id: `we-${id}`,
+            set_number: i + 1,
+            weight_kg: s.weight_kg,
+            reps: s.reps,
+            duration_seconds: null,
+            distance_km: null,
+            is_warmup: false,
+            is_pr: false,
+            rpe: null,
+            created_at: `${date}T10:00:00.000Z`,
+          })),
+          created_at: `${date}T10:00:00.000Z`,
+        },
+      ],
+      created_at: `${date}T10:00:00.000Z`,
+    };
+  }
+
+  it('returns newest-first summaries for one exercise only', () => {
+    useExerciseStore.setState({
+      workouts: [
+        finishedWorkout('w1', '2026-09-29', 'ex-0', [{ weight_kg: 60, reps: 8 }]),
+        finishedWorkout('w2', '2026-10-01', 'ex-0', [{ weight_kg: 60, reps: 9 }]),
+        finishedWorkout('w3', '2026-10-01', 'ex-1', [{ weight_kg: 40, reps: 10 }]),
+      ] as never,
+    });
+    const sessions = useExerciseStore.getState().getExerciseSessions('ex-0');
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0].date).toBe('2026-10-01');
+    expect(sessions[0].loadedTop).toMatchObject({ weight_kg: 60, reps: 9 });
+    expect(sessions[1].loadedTop).toMatchObject({ weight_kg: 60, reps: 8 });
+    expect(useExerciseStore.getState().getExerciseSessions('ex-9')).toHaveLength(0);
+  });
+
+  it('derives from finished flows end to end', () => {
+    const store = useExerciseStore.getState();
+    store.startWorkout('Push day');
+    useExerciseStore.getState().addExerciseToWorkout('ex-0');
+    const weId = useExerciseStore.getState().activeWorkout!.exercises[0].id;
+    useExerciseStore.getState().addSetToExercise(weId, {
+      set_number: 1, weight_kg: 60, reps: 8, duration_seconds: null, distance_km: null,
+      is_warmup: false, is_pr: false, rpe: 7,
+    });
+    useExerciseStore.getState().finishWorkout();
+    const sessions = useExerciseStore.getState().getExerciseSessions('ex-0');
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].loadedTop).toMatchObject({ weight_kg: 60, reps: 8, rpe: 7 });
+  });
+});

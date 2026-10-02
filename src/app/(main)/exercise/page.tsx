@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Play, Plus, X, Search, Trash2, Check, Dumbbell, Calendar, Trophy, Pencil, BookOpen } from 'lucide-react';
 import { PageHeader } from '@/components/layout/header';
 import { EmptyState } from '@/components/ui/card';
@@ -14,9 +14,14 @@ import {
   resolveEquipmentTags,
 } from '@/lib/exercise/wiki';
 import type { EquipmentTag } from '@/lib/types';
+import {
+  getProgressionGuidance,
+  resolveSuggestionTarget,
+  type SuggestedSet,
+} from '@/lib/exercise/progression';
 import { useExerciseStore } from '@/stores/exercise-store';
 import { useWorkoutPlannerStore, type DayOfWeek } from '@/stores/workout-planner-store';
-import { formatDate, cn } from '@/lib/utils';
+import { formatDate, cn, toDateString } from '@/lib/utils';
 import { MUSCLE_GROUPS } from '@/lib/constants';
 import type { MuscleGroup, Exercise, Workout, WorkoutExercise, ExerciseSet } from '@/lib/types';
 
@@ -41,7 +46,12 @@ const DAY_SHORT: Record<DayOfWeek, string> = { monday:'Mon', tuesday:'Tue', wedn
 export default function ExercisePage() {
   const { workouts, activeWorkout, startWorkout, finishWorkout, cancelWorkout,
     addExerciseToWorkout, addSetToExercise, updateSet, removeSet, removeExerciseFromWorkout,
-    exercises } = useExerciseStore();
+    exercises, getExerciseSessions } = useExerciseStore();
+  const prs = useWorkoutPlannerStore(s => s.prs);
+  const getPRForExercise = useWorkoutPlannerStore(s => s.getPRForExercise);
+  // Subscribe to PRs so detail sheets re-render when records change (read via getPRForExercise below).
+  void prs;
+  const today = toDateString();
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryTarget, setLibraryTarget] = useState<'workout' | DayOfWeek>('workout');
   // Wiki MVP: detail sheet opened from the library (null = closed).
@@ -83,6 +93,18 @@ export default function ExercisePage() {
   const detailAlreadyAdded = libraryTarget === 'workout' && detailExercise
     ? (activeWorkout?.exercises.some(we => we.exercise_id === detailExercise.id) ?? false)
     : false;
+  const detailGuidance = detailExercise
+    ? getProgressionGuidance(getExerciseSessions(detailExercise.id), today)
+    : null;
+  const detailHistoryText = (() => {
+    const latest = detailGuidance?.latest;
+    if (!latest) return null;
+    if (latest.loadedTop) return `${formatDate(latest.date)} · ${latest.loadedTop.weight_kg}kg × ${latest.loadedTop.reps}`;
+    if (latest.bodyweightTop) return `${formatDate(latest.date)} · ${latest.bodyweightTop.reps} reps`;
+    return null;
+  })();
+  const detailPr = detailExercise ? getPRForExercise(detailExercise.name) : undefined;
+  const detailPrText = detailPr ? `${detailPr.weight_kg}kg × ${detailPr.reps} · ${formatDate(detailPr.date)}` : null;
 
   return (
     <div>
@@ -139,6 +161,8 @@ export default function ExercisePage() {
           exercise={detailExercise}
           targetLabel={detailTargetLabel}
           alreadyAdded={detailAlreadyAdded}
+          historyText={detailHistoryText}
+          prText={detailPrText}
           onAdd={() => handleSelectExercise(detailExercise.id)}
           onClose={() => setDetailId(null)}
         />
@@ -150,12 +174,83 @@ export default function ExercisePage() {
 /* =================== ACTIVE WORKOUT =================== */
 function ActiveWorkoutView({ workout, onShowLibrary, onFinish, onCancel, onAddSet, onUpdateSet, onRemoveSet, onRemoveExercise, restTimer, onStartRest, restSeconds, onSetRestSeconds }: ActiveWorkoutProps) {
   const [elapsed, setElapsed] = useState(0);
+  const allWorkouts = useExerciseStore(s => s.workouts);
+  const getExerciseSessions = useExerciseStore(s => s.getExerciseSessions);
+  const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
+  const today = toDateString();
+  const guidanceById = useMemo(() => {
+    const map: Record<string, ReturnType<typeof getProgressionGuidance>> = {};
+    for (const we of workout.exercises) {
+      map[we.id] = getProgressionGuidance(getExerciseSessions(we.exercise_id), today);
+    }
+    return map;
+    // allWorkouts is intentionally a dep (not read inside): getExerciseSessions
+    // is a stable reference, so without it this memo would stay stale after
+    // finished workouts reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workout.exercises, allWorkouts, getExerciseSessions, today]);
   useEffect(() => {
     const start = new Date(workout.start_time).getTime();
     const iv = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000);
     return () => clearInterval(iv);
   }, [workout.start_time]);
   const mins = Math.floor(elapsed / 60), secs = elapsed % 60;
+
+  const applySuggestion = (we: WorkoutExercise, sug: SuggestedSet) => {
+    const target = resolveSuggestionTarget(we.sets);
+    if (target.type === 'update') {
+      // Prefill only a genuinely empty set; populated sets are never touched.
+      onUpdateSet(we.id, target.setId, { weight_kg: sug.weight_kg, reps: sug.reps });
+    } else {
+      onAddSet(we.id, {
+        set_number: we.sets.length + 1, weight_kg: sug.weight_kg, reps: sug.reps,
+        duration_seconds: null, distance_km: null, is_warmup: false, is_pr: false, rpe: null,
+      });
+    }
+  };
+
+  const renderGuidance = (we: WorkoutExercise) => {
+    const g = guidanceById[we.id];
+    if (!g?.latest) return null;
+    const top = g.latest.loadedTop;
+    const lastText = top
+      ? `${formatDate(g.latest.date)} · ${top.weight_kg}kg × ${top.reps}`
+      : g.latest.bodyweightTop
+        ? `${formatDate(g.latest.date)} · ${g.latest.bodyweightTop.reps} reps`
+        : null;
+    if (!lastText) return null;
+    const sug = g.suggestion;
+    const sugText = sug
+      ? (sug.weight_kg === null ? `${sug.reps} reps` : `${sug.weight_kg}kg × ${sug.reps}`)
+      : null;
+    const name = we.exercise?.name || 'Exercise';
+    return (
+      <div className="px-4 pt-1">
+        <div className="text-[10px] text-[#777]">Last: {lastText}</div>
+        {sug && sugText && !dismissed[we.id] && (
+          <div className="mt-2 rounded-xl border border-[rgba(240,165,0,0.18)] bg-[rgba(240,165,0,0.06)] p-2.5">
+            <p className="text-[11px] leading-relaxed text-[#CCC]">
+              <span className="font-semibold text-[#f59e0b]">Suggestion · </span>{g.rationale}
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => applySuggestion(we, sug)}
+                aria-label={`Use suggested ${sugText} for ${name}`}
+                className="flex-1 py-2 rounded-lg gradient-btn text-xs font-semibold">
+                Use {sugText}
+              </button>
+              <button
+                onClick={() => setDismissed(d => ({ ...d, [we.id]: true }))}
+                aria-label={`Dismiss suggestion for ${name}`}
+                className="px-3 py-2 rounded-lg border border-[rgba(230,213,184,0.08)] text-xs font-medium text-[#777] hover:bg-[rgba(230,213,184,0.04)]">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="px-4 lg:px-0 py-4 space-y-4">
@@ -195,6 +290,7 @@ function ActiveWorkoutView({ workout, onShowLibrary, onFinish, onCancel, onAddSe
             </div>
             <button onClick={() => onRemoveExercise(we.id)} className="text-[#444] hover:text-[#ea580c] p-1 transition-colors"><Trash2 className="w-4 h-4" /></button>
           </div>
+          {renderGuidance(we)}
           <div className="px-4 pb-3">
             <div className="grid grid-cols-[40px_1fr_1fr_36px] gap-2 text-[9px] text-[#555] font-semibold uppercase mb-2 px-1">
               <span>Set</span><span>Weight</span><span>Reps</span><span></span>
@@ -479,10 +575,12 @@ function ExerciseLibrary({ exercises, onDetail, onClose }: { exercises: Exercise
 }
 
 /* =================== EXERCISE DETAIL (Wiki MVP) =================== */
-function ExerciseDetail({ exercise, targetLabel, alreadyAdded, onAdd, onClose }: {
+function ExerciseDetail({ exercise, targetLabel, alreadyAdded, historyText, prText, onAdd, onClose }: {
   exercise: Exercise;
   targetLabel: string;
   alreadyAdded: boolean;
+  historyText: string | null;
+  prText: string | null;
   onAdd: () => void;
   onClose: () => void;
 }) {
@@ -533,6 +631,14 @@ function ExerciseDetail({ exercise, targetLabel, alreadyAdded, onAdd, onClose }:
               {sections.equipmentTags.map(t => <span key={t} className={metaChip}>{EQUIPMENT_LABELS[t]}</span>)}
             </div>
           </section>
+
+          {(historyText || prText) && (
+            <section aria-label="Previous performance">
+              <h4 className="text-[11px] font-bold text-[#777] uppercase tracking-wider mb-2">Last session</h4>
+              {historyText && <p className="text-[13px] text-[#CCC]">{historyText}</p>}
+              {prText && <p className="text-xs text-[#f59e0b] font-semibold mt-1">PR · {prText}</p>}
+            </section>
+          )}
 
           {sections.instructions.length > 0 && (
             <section aria-label="How to perform">

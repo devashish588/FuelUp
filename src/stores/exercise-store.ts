@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Exercise, Workout, WorkoutExercise, ExerciseSet } from '@/lib/types';
 import { EXERCISE_DATABASE } from '@/lib/constants/exercise-database';
+import { summarizeExerciseSessions, type SessionSummary } from '@/lib/exercise/progression';
 import { generateId } from '@/lib/utils';
 import { calculateWorkoutDurationMinutes } from '@/lib/calculations/workout';
 import { LOCAL_OWNER_ID, PERSIST_VERSION, STORAGE_KEYS } from '@/config/app';
@@ -32,6 +33,8 @@ interface ExerciseState {
   removeExerciseFromWorkout: (workoutExerciseId: string) => void;
   getWorkoutsForDate: (date: string) => Workout[];
   getExerciseById: (id: string) => Exercise | undefined;
+  /** Newest-first usable session summaries for one exercise (read-only). */
+  getExerciseSessions: (exerciseId: string) => SessionSummary[];
   /** True when the active workout already contains this exercise (dup guard). */
   hasExerciseInWorkout: (exerciseId: string) => boolean;
   addCustomExercise: (exercise: Omit<Exercise, 'id' | 'created_at' | 'created_by'>) => Exercise;
@@ -176,6 +179,8 @@ export const useExerciseStore = create<ExerciseState>()(
       },
 
       getWorkoutsForDate: (date) => get().workouts.filter((w) => w.date === date),
+
+      getExerciseSessions: (exerciseId) => summarizeExerciseSessions(get().workouts, exerciseId),
 
       getExerciseById: (id) => get().exercises.find((e) => e.id === id),
 
