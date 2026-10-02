@@ -44,6 +44,39 @@ export type MuscleGroup =
   | 'cardio'
   | 'full_body';
 
+/** Exercise Wiki (MVP): normalized equipment taxonomy. Legacy rows keep
+ *  free-text `equipment`; `resolveEquipmentTags` maps them onto these tags. */
+export type EquipmentTag =
+  | 'barbell'
+  | 'dumbbell'
+  | 'kettlebell'
+  | 'cable'
+  | 'machine'
+  | 'bench'
+  | 'rack'
+  | 'bodyweight'
+  | 'pullup_bar'
+  | 'dip_bars'
+  | 'bands'
+  | 'cardio_machine'
+  | 'other';
+
+/** Exercise Wiki (MVP): primary movement pattern of an exercise. */
+export type MovementPattern =
+  | 'push'
+  | 'pull'
+  | 'hinge'
+  | 'squat'
+  | 'lunge'
+  | 'carry'
+  | 'rotation'
+  | 'core_stability'
+  | 'isolation'
+  | 'cardio';
+
+/** Exercise Wiki (MVP): coaching difficulty of an exercise. */
+export type ExerciseDifficulty = 'beginner' | 'intermediate' | 'advanced';
+
 export interface BodyMetric {
   id: string;
   user_id: string;
@@ -177,6 +210,21 @@ export interface Exercise {
   is_custom: boolean;
   created_by: string | null;
   created_at: string;
+  /** Exercise Wiki (MVP): all fields optional so legacy rows render safely. */
+  /** Step-by-step setup + execution (replaces the one-line `instructions`). */
+  detailed_instructions?: string[];
+  /** Short coaching cues shown alongside instructions. */
+  cues?: string[];
+  /** Primary muscles worked (free-text labels, e.g. 'Chest'). */
+  primary_muscles?: string[];
+  /** Secondary/supporting muscles worked. */
+  secondary_muscles?: string[];
+  /** Normalized equipment categories (see `resolveEquipmentTags`). */
+  equipment_tags?: EquipmentTag[];
+  /** Primary movement pattern. */
+  movement?: MovementPattern;
+  /** Coaching difficulty. */
+  difficulty?: ExerciseDifficulty;
 }
 
 export interface Workout {

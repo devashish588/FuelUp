@@ -32,6 +32,8 @@ interface ExerciseState {
   removeExerciseFromWorkout: (workoutExerciseId: string) => void;
   getWorkoutsForDate: (date: string) => Workout[];
   getExerciseById: (id: string) => Exercise | undefined;
+  /** True when the active workout already contains this exercise (dup guard). */
+  hasExerciseInWorkout: (exerciseId: string) => boolean;
   addCustomExercise: (exercise: Omit<Exercise, 'id' | 'created_at' | 'created_by'>) => Exercise;
 }
 
@@ -105,6 +107,8 @@ export const useExerciseStore = create<ExerciseState>()(
       addExerciseToWorkout: (exerciseId) => {
         set((s) => {
           if (!s.activeWorkout) return s;
+          // Wiki MVP: adding twice (double-tap, re-open) must not duplicate.
+          if (s.activeWorkout.exercises.some((we) => we.exercise_id === exerciseId)) return s;
           const exercise = s.exercises.find((e) => e.id === exerciseId);
           const we: WorkoutExercise = {
             id: generateId(),
@@ -174,6 +178,9 @@ export const useExerciseStore = create<ExerciseState>()(
       getWorkoutsForDate: (date) => get().workouts.filter((w) => w.date === date),
 
       getExerciseById: (id) => get().exercises.find((e) => e.id === id),
+
+      hasExerciseInWorkout: (exerciseId) =>
+        get().activeWorkout?.exercises.some((we) => we.exercise_id === exerciseId) ?? false,
 
       addCustomExercise: (exercise) => {
         const newEx: Exercise = {

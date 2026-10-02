@@ -1,7 +1,19 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { Play, Plus, X, Search, Trash2, Check, Dumbbell, Calendar, Trophy, Pencil } from 'lucide-react';
+import { Play, Plus, X, Search, Trash2, Check, Dumbbell, Calendar, Trophy, Pencil, BookOpen } from 'lucide-react';
 import { PageHeader } from '@/components/layout/header';
+import { EmptyState } from '@/components/ui/card';
+import {
+  DIFFICULTY_LABELS,
+  EQUIPMENT_LABELS,
+  EQUIPMENT_TAGS,
+  MOVEMENT_LABELS,
+  filterExercises,
+  getDetailSections,
+  hasWikiContent,
+  resolveEquipmentTags,
+} from '@/lib/exercise/wiki';
+import type { EquipmentTag } from '@/lib/types';
 import { useExerciseStore } from '@/stores/exercise-store';
 import { useWorkoutPlannerStore, type DayOfWeek } from '@/stores/workout-planner-store';
 import { formatDate, cn } from '@/lib/utils';
@@ -32,6 +44,8 @@ export default function ExercisePage() {
     exercises } = useExerciseStore();
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryTarget, setLibraryTarget] = useState<'workout' | DayOfWeek>('workout');
+  // Wiki MVP: detail sheet opened from the library (null = closed).
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [restTimer, setRestTimer] = useState<number | null>(null);
   const [restSeconds, setRestSeconds] = useState(90);
   const [tab, setTab] = useState<'workout' | 'plan' | 'prs'>(activeWorkout ? 'workout' : 'plan');
@@ -55,12 +69,20 @@ export default function ExercisePage() {
     const ex = exercises.find(e => e.id === exId);
     if (!ex) return;
     if (libraryTarget === 'workout') {
+      if (!activeWorkout) startWorkout('Workout');
       addExerciseToWorkout(exId);
     } else {
       useWorkoutPlannerStore.getState().addExerciseToDay(libraryTarget, ex.name, exId, 3, '8-12');
     }
     setShowLibrary(false);
+    setDetailId(null);
   };
+
+  const detailExercise = detailId ? exercises.find(e => e.id === detailId) ?? null : null;
+  const detailTargetLabel = libraryTarget === 'workout' ? "today's workout" : DAY_SHORT[libraryTarget];
+  const detailAlreadyAdded = libraryTarget === 'workout' && detailExercise
+    ? (activeWorkout?.exercises.some(we => we.exercise_id === detailExercise.id) ?? false)
+    : false;
 
   return (
     <div>
@@ -110,7 +132,16 @@ export default function ExercisePage() {
       {tab === 'prs' && <PRView />}
 
       {showLibrary && (
-        <ExerciseLibrary exercises={exercises} onSelect={handleSelectExercise} onClose={() => setShowLibrary(false)} />
+        <ExerciseLibrary exercises={exercises} onDetail={setDetailId} onClose={() => setShowLibrary(false)} />
+      )}
+      {detailExercise && (
+        <ExerciseDetail
+          exercise={detailExercise}
+          targetLabel={detailTargetLabel}
+          alreadyAdded={detailAlreadyAdded}
+          onAdd={() => handleSelectExercise(detailExercise.id)}
+          onClose={() => setDetailId(null)}
+        />
       )}
     </div>
   );
@@ -378,47 +409,170 @@ function PRView() {
 }
 
 /* =================== EXERCISE LIBRARY =================== */
-function ExerciseLibrary({ exercises, onSelect, onClose }: { exercises: Exercise[]; onSelect: (id: string) => void; onClose: () => void }) {
+function ExerciseLibrary({ exercises, onDetail, onClose }: { exercises: Exercise[]; onDetail: (id: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [filterGroup, setFilterGroup] = useState<MuscleGroup | 'all'>('all');
-  const filtered = exercises.filter((e: Exercise) => {
-    const q = e.name.toLowerCase().includes(query.toLowerCase());
-    const g = filterGroup === 'all' || e.muscle_group === filterGroup;
-    return q && g;
-  });
+  const [filterEquip, setFilterEquip] = useState<EquipmentTag | 'all'>('all');
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const filtered = filterExercises(exercises, { query, muscle: filterGroup, equipment: filterEquip });
+  const clearFilters = () => { setQuery(''); setFilterGroup('all'); setFilterEquip('all'); };
+  const chip = (active: boolean) => cn('px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border transition-colors',
+    active ? 'bg-[rgba(240,165,0,0.12)] text-[#f59e0b] border-[rgba(240,165,0,0.2)]' : 'bg-[rgba(230,213,184,0.03)] text-[#555] border-[rgba(230,213,184,0.04)]');
 
   return (
     <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/60 backdrop-blur-sm fade-in" onClick={onClose}>
       <div className="w-full max-w-lg bg-[#111111] border border-[rgba(230,213,184,0.08)] rounded-t-3xl lg:rounded-2xl shadow-2xl slide-up max-h-[85vh] flex flex-col max-lg:pb-safe" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-[rgba(230,213,184,0.06)]">
           <h3 className="text-lg font-bold text-[#EEE]">Exercise Library</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-[rgba(230,213,184,0.06)] flex items-center justify-center hover:bg-[rgba(230,213,184,0.1)]"><X className="w-4 h-4 text-[#777]" /></button>
+          <button onClick={onClose} aria-label="Close exercise library" className="w-8 h-8 rounded-full bg-[rgba(230,213,184,0.06)] flex items-center justify-center hover:bg-[rgba(230,213,184,0.1)]"><X className="w-4 h-4 text-[#777]" /></button>
         </div>
         <div className="p-4 border-b border-[rgba(230,213,184,0.06)]">
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#555]" />
-            <input type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search exercises..." autoFocus className="dark-input pl-9" />
+            <label htmlFor="wiki-search" className="sr-only">Search exercises</label>
+            <input id="wiki-search" type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search exercises..." autoFocus className="dark-input pl-9" />
           </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-            <button onClick={() => setFilterGroup('all')} className={cn('px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border transition-colors', filterGroup === 'all' ? 'bg-[rgba(240,165,0,0.12)] text-[#f59e0b] border-[rgba(240,165,0,0.2)]' : 'bg-[rgba(230,213,184,0.03)] text-[#555] border-[rgba(230,213,184,0.04)]')}>All</button>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Filter by muscle group">
+            <button onClick={() => setFilterGroup('all')} aria-pressed={filterGroup === 'all'} className={chip(filterGroup === 'all')}>All</button>
             {MUSCLE_GROUPS.map(g => (
-              <button key={g.value} onClick={() => setFilterGroup(g.value)}
-                className={cn('px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border transition-colors', filterGroup === g.value ? 'bg-[rgba(240,165,0,0.12)] text-[#f59e0b] border-[rgba(240,165,0,0.2)]' : 'bg-[rgba(230,213,184,0.03)] text-[#555] border-[rgba(230,213,184,0.04)]')}>
+              <button key={g.value} onClick={() => setFilterGroup(g.value)} aria-pressed={filterGroup === g.value} className={chip(filterGroup === g.value)}>
                 {g.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar mt-1.5" role="group" aria-label="Filter by equipment">
+            <button onClick={() => setFilterEquip('all')} aria-pressed={filterEquip === 'all'} className={chip(filterEquip === 'all')}>Any gear</button>
+            {EQUIPMENT_TAGS.filter(t => t !== 'other').map(t => (
+              <button key={t} onClick={() => setFilterEquip(filterEquip === t ? 'all' : t)} aria-pressed={filterEquip === t} className={chip(filterEquip === t)}>
+                {EQUIPMENT_LABELS[t]}
               </button>
             ))}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-1">
-          {filtered.map((e: Exercise) => (
-            <button key={e.id} onClick={() => onSelect(e.id)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-[rgba(230,213,184,0.04)] transition-colors text-left">
-              <div>
-                <div className="text-sm font-medium text-[#EEE]">{e.name}</div>
-                <div className="text-[10px] text-[#555] capitalize">{e.muscle_group} · {e.equipment}</div>
+          {filtered.length === 0 ? (
+            <EmptyState icon={Search} message="No exercises match these filters." action="Clear filters" onAction={clearFilters} />
+          ) : filtered.map((e: Exercise) => (
+            <button key={e.id} onClick={() => onDetail(e.id)} className="w-full flex items-center justify-between gap-2 p-3 rounded-xl hover:bg-[rgba(230,213,184,0.04)] transition-colors text-left">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-[#EEE] flex items-center gap-1.5">
+                  <span className="truncate">{e.name}</span>
+                  {hasWikiContent(e) && (
+                    <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[rgba(240,165,0,0.12)] text-[#f59e0b] text-[9px] font-bold uppercase tracking-wide">
+                      <BookOpen className="w-2.5 h-2.5" /> Guide
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-[#555] capitalize">{e.muscle_group} · {EQUIPMENT_LABELS[resolveEquipmentTags(e)[0]]}</div>
               </div>
-              <Plus className="w-4 h-4 text-[#f59e0b]" />
+              <Plus className="w-4 h-4 text-[#f59e0b] shrink-0" />
             </button>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =================== EXERCISE DETAIL (Wiki MVP) =================== */
+function ExerciseDetail({ exercise, targetLabel, alreadyAdded, onAdd, onClose }: {
+  exercise: Exercise;
+  targetLabel: string;
+  alreadyAdded: boolean;
+  onAdd: () => void;
+  onClose: () => void;
+}) {
+  const sections = getDetailSections(exercise);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const metaChip = 'px-2 py-1 rounded-lg bg-[rgba(230,213,184,0.04)] border border-[rgba(230,213,184,0.06)] text-[11px] font-medium text-[#AAA] capitalize';
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end lg:items-center justify-center bg-black/60 backdrop-blur-sm fade-in" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-labelledby="wiki-detail-title"
+        className="w-full max-w-lg bg-[#111111] border border-[rgba(230,213,184,0.08)] rounded-t-3xl lg:rounded-2xl shadow-2xl slide-up max-h-[85vh] flex flex-col max-lg:pb-safe" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 p-4 border-b border-[rgba(230,213,184,0.06)]">
+          <div className="min-w-0">
+            <h3 id="wiki-detail-title" className="text-lg font-bold text-[#EEE] leading-snug">{exercise.name}</h3>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              <span className={metaChip}>{exercise.muscle_group.replace('_', ' ')}</span>
+              {exercise.movement && <span className={metaChip}>{MOVEMENT_LABELS[exercise.movement]}</span>}
+              {exercise.difficulty && <span className={metaChip}>{DIFFICULTY_LABELS[exercise.difficulty]}</span>}
+            </div>
+          </div>
+          <button ref={closeRef} onClick={onClose} aria-label="Close exercise details" className="shrink-0 w-8 h-8 rounded-full bg-[rgba(230,213,184,0.06)] flex items-center justify-center hover:bg-[rgba(230,213,184,0.1)]"><X className="w-4 h-4 text-[#777]" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          {(sections.primaryMuscles.length > 0 || sections.secondaryMuscles.length > 0) && (
+            <section aria-label="Muscles worked">
+              <h4 className="text-[11px] font-bold text-[#777] uppercase tracking-wider mb-2">Muscles worked</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {sections.primaryMuscles.map(m => (
+                  <span key={m} className="px-2.5 py-1 rounded-lg bg-[rgba(240,165,0,0.12)] text-[#f59e0b] border border-[rgba(240,165,0,0.2)] text-xs font-semibold">{m}</span>
+                ))}
+                {sections.secondaryMuscles.map(m => (
+                  <span key={m} className="px-2.5 py-1 rounded-lg bg-[rgba(230,213,184,0.04)] text-[#AAA] border border-[rgba(230,213,184,0.06)] text-xs">{m}</span>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section aria-label="Equipment">
+            <h4 className="text-[11px] font-bold text-[#777] uppercase tracking-wider mb-2">Equipment</h4>
+            <div className="flex flex-wrap gap-1.5">
+              {sections.equipmentTags.map(t => <span key={t} className={metaChip}>{EQUIPMENT_LABELS[t]}</span>)}
+            </div>
+          </section>
+
+          {sections.instructions.length > 0 && (
+            <section aria-label="How to perform">
+              <h4 className="text-[11px] font-bold text-[#777] uppercase tracking-wider mb-2">How to perform</h4>
+              <ol className="space-y-2.5">
+                {sections.instructions.map((step, i) => (
+                  <li key={i} className="flex gap-2.5 text-[13px] text-[#CCC] leading-relaxed">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-[rgba(240,165,0,0.12)] text-[#f59e0b] text-[10px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
+          {sections.cues.length > 0 && (
+            <section aria-label="Coaching cues">
+              <h4 className="text-[11px] font-bold text-[#777] uppercase tracking-wider mb-2">Cues</h4>
+              <ul className="space-y-2">
+                {sections.cues.map((cue, i) => (
+                  <li key={i} className="flex gap-2 text-[13px] text-[#CCC] leading-relaxed">
+                    <Check className="w-4 h-4 text-[#f59e0b] shrink-0 mt-0.5" />
+                    <span>{cue}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-[rgba(230,213,184,0.06)] max-lg:pb-safe">
+          <button
+            onClick={onAdd}
+            disabled={alreadyAdded}
+            aria-label={alreadyAdded ? `${exercise.name} is already in today's workout` : `Add ${exercise.name} to ${targetLabel}`}
+            className={alreadyAdded
+              ? 'w-full py-3 rounded-xl text-sm font-semibold bg-[rgba(230,213,184,0.06)] text-[#777]'
+              : 'w-full py-3 gradient-btn text-sm flex items-center justify-center gap-2'}>
+            {alreadyAdded ? (<><Check className="w-4 h-4" /> Already in workout</>) : (<><Plus className="w-4 h-4" /> Add to {targetLabel}</>)}
+          </button>
         </div>
       </div>
     </div>
