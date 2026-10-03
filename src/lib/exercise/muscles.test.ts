@@ -135,4 +135,26 @@ describe('regionsForExercise + regionMatches', () => {
     );
     expect(regionMatches(byName('Lat Pulldown'), 'quads')).toBe(false);
   });
+
+  it('resolves the legs batch to defensible regions', () => {
+    const byName = (name: string) => EXERCISE_DATABASE.find((e) => e.name === name)!;
+    expect(regionsForExercise(byName('Front Squat')).primary).toEqual(
+      expect.arrayContaining(['quads', 'glutes'])
+    );
+    expect(regionsForExercise(byName('Leg Press')).primary).toEqual(
+      expect.arrayContaining(['quads', 'glutes'])
+    );
+    expect(regionsForExercise(byName('Romanian Deadlift')).primary).toEqual(
+      expect.arrayContaining(['hamstrings', 'glutes'])
+    );
+    expect(regionsForExercise(byName('Leg Curl')).primary).toEqual(['hamstrings']);
+    expect(regionsForExercise(byName('Hip Thrust')).primary).toEqual(['glutes']);
+    expect(regionsForExercise(byName('Hip Thrust')).secondary).toEqual(
+      expect.arrayContaining(['hamstrings'])
+    );
+    expect(regionsForExercise(byName('Calf Raises')).primary).toEqual(['calves']);
+    expect(regionMatches(byName('Leg Extension'), 'quads')).toBe(true);
+    expect(regionMatches(byName('Bulgarian Split Squat'), 'glutes')).toBe(true);
+    expect(regionMatches(byName('Front Squat'), 'calves')).toBe(false);
+  });
 });

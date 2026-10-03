@@ -78,7 +78,7 @@ describe('filterExercises', () => {
 });
 
 describe('wiki content + legacy-safe sections', () => {
-  it('marks the 19 enriched entries and only they carry content', () => {
+  it('marks the 27 enriched entries and only they carry content', () => {
     const enriched = EXERCISE_DATABASE.filter((e) =>
       hasWikiContent({ detailed_instructions: e.detailed_instructions, cues: e.cues })
     );
@@ -89,18 +89,26 @@ describe('wiki content + legacy-safe sections', () => {
         'Barbell Deadlift',
         'Barbell Row',
         'Barbell Squat',
+        'Bulgarian Split Squat',
+        'Calf Raises',
         'Dumbbell Curl',
         'Dumbbell Row',
         'Dumbbell Shoulder Press',
         'Face Pulls',
         'Front Raises',
+        'Front Squat',
+        'Hip Thrust',
         'Lat Pulldown',
         'Lateral Raises',
+        'Leg Curl',
+        'Leg Extension',
+        'Leg Press',
         'Lunges',
         'Overhead Press',
         'Plank',
         'Pull-ups',
         'Push-ups',
+        'Romanian Deadlift',
         'Seated Cable Row',
         'T-Bar Row',
       ].sort()
