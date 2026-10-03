@@ -78,22 +78,31 @@ describe('filterExercises', () => {
 });
 
 describe('wiki content + legacy-safe sections', () => {
-  it('marks the 10 enriched entries and only they carry content', () => {
+  it('marks the 19 enriched entries and only they carry content', () => {
     const enriched = EXERCISE_DATABASE.filter((e) =>
       hasWikiContent({ detailed_instructions: e.detailed_instructions, cues: e.cues })
     );
     expect(enriched.map((e) => e.name).sort()).toEqual(
       [
+        'Arnold Press',
         'Barbell Bench Press',
         'Barbell Deadlift',
         'Barbell Row',
         'Barbell Squat',
         'Dumbbell Curl',
+        'Dumbbell Row',
+        'Dumbbell Shoulder Press',
+        'Face Pulls',
+        'Front Raises',
+        'Lat Pulldown',
+        'Lateral Raises',
         'Lunges',
         'Overhead Press',
         'Plank',
         'Pull-ups',
         'Push-ups',
+        'Seated Cable Row',
+        'T-Bar Row',
       ].sort()
     );
   });
@@ -198,5 +207,40 @@ describe('region filter (Muscle Map v1)', () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(names(rows)).toContain('Barbell Squat');
     expect(names(rows)).toContain('Lunges');
+  });
+});
+
+describe('enriched metadata validity (Batch 1)', () => {
+  it('validates every enriched entry against the canonical vocabularies', () => {
+    const validTags = ['barbell', 'dumbbell', 'kettlebell', 'cable', 'machine', 'bench', 'rack', 'bodyweight', 'pullup_bar', 'dip_bars', 'bands', 'cardio_machine', 'other'];
+    const validMovements = ['push', 'pull', 'hinge', 'squat', 'lunge', 'carry', 'rotation', 'core_stability', 'isolation', 'cardio'];
+    const validDifficulties = ['beginner', 'intermediate', 'advanced'];
+    for (const entry of EXERCISE_DATABASE) {
+      const enriched =
+        (entry.detailed_instructions?.length ?? 0) > 0 || (entry.cues?.length ?? 0) > 0;
+      if (!enriched) continue;
+      for (const tag of entry.equipment_tags ?? []) {
+        expect(validTags, `${entry.name} tag`).toContain(tag);
+      }
+      expect(validMovements, entry.name).toContain(entry.movement);
+      expect(validDifficulties, entry.name).toContain(entry.difficulty);
+      expect((entry.detailed_instructions ?? []).length, entry.name).toBeGreaterThanOrEqual(3);
+      expect((entry.cues ?? []).length, entry.name).toBeGreaterThanOrEqual(2);
+      expect((entry.primary_muscles ?? []).length, entry.name).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps legacy fields intact on every enriched entry', () => {
+    for (const entry of EXERCISE_DATABASE) {
+      expect(typeof entry.name, 'name').toBe('string');
+      expect(typeof entry.muscle_group, entry.name).toBe('string');
+      expect(typeof entry.equipment, entry.name).toBe('string');
+      expect(typeof entry.instructions, entry.name).toBe('string');
+      expect(typeof entry.is_custom, entry.name).toBe('boolean');
+    }
+    const pulldown = EXERCISE_DATABASE.find((e) => e.name === 'Lat Pulldown')!;
+    expect(pulldown.equipment).toBe('Cable Machine');
+    expect(pulldown.instructions).toBe('Pull bar down to chest, squeeze lats.');
+    expect(pulldown.muscle_group).toBe('back');
   });
 });

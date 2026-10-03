@@ -112,4 +112,27 @@ describe('regionsForExercise + regionMatches', () => {
       }
     }
   });
+
+  it('resolves the Batch 1 back/shoulder entries to defensible regions', () => {
+    const byName = (name: string) => EXERCISE_DATABASE.find((e) => e.name === name)!;
+    expect(regionsForExercise(byName('Lat Pulldown')).primary).toEqual(['lats']);
+    expect(regionsForExercise(byName('Dumbbell Row')).primary).toEqual(
+      expect.arrayContaining(['lats', 'upper_back'])
+    );
+    expect(regionsForExercise(byName('Seated Cable Row')).primary).toEqual(
+      expect.arrayContaining(['lats', 'upper_back'])
+    );
+    expect(regionsForExercise(byName('T-Bar Row')).primary).toEqual(
+      expect.arrayContaining(['lats', 'upper_back'])
+    );
+    expect(regionsForExercise(byName('Face Pulls')).primary).toEqual(
+      expect.arrayContaining(['rear_delts', 'upper_back'])
+    );
+    expect(regionsForExercise(byName('Front Raises')).primary).toEqual(['front_delts']);
+    expect(regionsForExercise(byName('Lateral Raises')).primary).toEqual(['side_delts']);
+    expect(regionsForExercise(byName('Arnold Press')).primary).toEqual(
+      expect.arrayContaining(['front_delts', 'side_delts'])
+    );
+    expect(regionMatches(byName('Lat Pulldown'), 'quads')).toBe(false);
+  });
 });
