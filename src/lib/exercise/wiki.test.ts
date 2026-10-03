@@ -124,3 +124,79 @@ describe('wiki content + legacy-safe sections', () => {
     expect(sections.equipmentTags).toEqual(['bodyweight']);
   });
 });
+
+describe('region filter (Muscle Map v1)', () => {
+  const names = (rows: { name: string }[]) => rows.map((e) => e.name);
+
+  it('matches normalized primary muscles', () => {
+    const rows = filterExercises(EXERCISE_DATABASE as never, {
+      query: '', muscle: 'all', equipment: 'all', region: 'chest',
+    });
+    expect(names(rows)).toContain('Barbell Bench Press');
+    expect(names(rows)).toContain('Push-ups');
+    expect(names(rows)).not.toContain('Barbell Squat');
+  });
+
+  it('matches explicit secondary muscles outside the legacy group', () => {
+    // Plank is core-group; glutes only match through explicit secondary metadata.
+    const rows = filterExercises(EXERCISE_DATABASE as never, {
+      query: '', muscle: 'all', equipment: 'all', region: 'glutes',
+    });
+    expect(names(rows)).toContain('Plank');
+    expect(names(rows)).toContain('Barbell Squat');
+  });
+
+  it('falls back to legacy group expansion without Wiki metadata', () => {
+    const rows = filterExercises(EXERCISE_DATABASE as never, {
+      query: '', muscle: 'all', equipment: 'all', region: 'lats',
+    });
+    expect(names(rows)).toContain('Lat Pulldown');
+    expect(names(rows)).toContain('T-Bar Row');
+    expect(names(rows)).toContain('Pull-ups');
+    expect(names(rows)).not.toContain('Barbell Bench Press');
+  });
+
+  it('treats absent or cleared regions as no filter', () => {
+    const all = EXERCISE_DATABASE.length;
+    expect(filterExercises(EXERCISE_DATABASE as never, { query: '', muscle: 'all', equipment: 'all' })).toHaveLength(all);
+    expect(
+      filterExercises(EXERCISE_DATABASE as never, { query: '', muscle: 'all', equipment: 'all', region: null })
+    ).toHaveLength(all);
+  });
+
+  it('combines region with query, muscle, and equipment filters', () => {
+    const rows = filterExercises(EXERCISE_DATABASE as never, {
+      query: 'press', muscle: 'chest', equipment: 'barbell', region: 'chest',
+    });
+    expect(names(rows)).toContain('Barbell Bench Press');
+    expect(names(rows)).not.toContain('Dumbbell Bench Press');
+  });
+
+  it('returns empty when nothing satisfies every filter', () => {
+    const rows = filterExercises(EXERCISE_DATABASE as never, {
+      query: '', muscle: 'chest', equipment: 'all', region: 'forearms',
+    });
+    expect(rows).toHaveLength(0);
+  });
+
+  it('excludes cardio exercises from every muscle region', () => {
+    const cardioNames = ['Elliptical', 'Jump Rope', 'Rowing Machine', 'Stair Climber', 'Stationary Bike', 'Treadmill Running'];
+    for (const region of ['quads', 'lats', 'chest', 'biceps'] as const) {
+      const rows = filterExercises(EXERCISE_DATABASE as never, {
+        query: '', muscle: 'all', equipment: 'all', region,
+      });
+      for (const name of cardioNames) {
+        expect(names(rows), `${region} vs ${name}`).not.toContain(name);
+      }
+    }
+  });
+
+  it('keeps region counts consistent with the same matcher', () => {
+    const rows = filterExercises(EXERCISE_DATABASE as never, {
+      query: '', muscle: 'all', equipment: 'all', region: 'quads',
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(names(rows)).toContain('Barbell Squat');
+    expect(names(rows)).toContain('Lunges');
+  });
+});

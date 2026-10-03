@@ -10,6 +10,7 @@ import type {
   MovementPattern,
   MuscleGroup,
 } from '@/lib/types';
+import { regionMatches, type MuscleRegionId } from './muscles';
 
 export const EQUIPMENT_LABELS: Record<EquipmentTag, string> = {
   barbell: 'Barbell',
@@ -104,11 +105,14 @@ export interface WikiFilter {
   query: string;
   muscle: MuscleGroup | 'all';
   equipment: EquipmentTag | 'all';
+  /** Muscle Map v1: optional canonical region; absent/null = no region filter. */
+  region?: MuscleRegionId | null;
 }
 
 /**
  * Search + filter exercises. Query matches the name (case-insensitive);
- * muscle matches `muscle_group`; equipment matches resolved tags.
+ * muscle matches `muscle_group`; equipment matches resolved tags; region
+ * matches normalized primary/secondary muscles with legacy group fallback.
  */
 export function filterExercises(exercises: Exercise[], filter: WikiFilter): Exercise[] {
   const q = filter.query.trim().toLowerCase();
@@ -116,6 +120,7 @@ export function filterExercises(exercises: Exercise[], filter: WikiFilter): Exer
     if (q && !e.name.toLowerCase().includes(q)) return false;
     if (filter.muscle !== 'all' && e.muscle_group !== filter.muscle) return false;
     if (filter.equipment !== 'all' && !resolveEquipmentTags(e).includes(filter.equipment)) return false;
+    if (filter.region != null && !regionMatches(e, filter.region)) return false;
     return true;
   });
 }

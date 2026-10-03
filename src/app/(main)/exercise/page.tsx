@@ -19,6 +19,8 @@ import {
   resolveSuggestionTarget,
   type SuggestedSet,
 } from '@/lib/exercise/progression';
+import { MuscleMapBack, MuscleMapFront } from '@/components/exercise/muscle-map';
+import { MUSCLE_REGIONS, type MuscleRegionId, type MuscleView } from '@/lib/exercise/muscles';
 import { useExerciseStore } from '@/stores/exercise-store';
 import { useWorkoutPlannerStore, type DayOfWeek } from '@/stores/workout-planner-store';
 import { formatDate, cn, toDateString } from '@/lib/utils';
@@ -509,24 +511,67 @@ function ExerciseLibrary({ exercises, onDetail, onClose }: { exercises: Exercise
   const [query, setQuery] = useState('');
   const [filterGroup, setFilterGroup] = useState<MuscleGroup | 'all'>('all');
   const [filterEquip, setFilterEquip] = useState<EquipmentTag | 'all'>('all');
+  // Muscle Map v1: sheet-local discovery mode + single selected region.
+  const [view, setView] = useState<'list' | 'map'>('list');
+  const [mapView, setMapView] = useState<MuscleView>('front');
+  const [region, setRegion] = useState<MuscleRegionId | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-  const filtered = filterExercises(exercises, { query, muscle: filterGroup, equipment: filterEquip });
-  const clearFilters = () => { setQuery(''); setFilterGroup('all'); setFilterEquip('all'); };
+  const filtered = filterExercises(exercises, { query, muscle: filterGroup, equipment: filterEquip, region });
+  const clearFilters = () => { setQuery(''); setFilterGroup('all'); setFilterEquip('all'); setRegion(null); };
+  const clearRegion = () => setRegion(null);
+  const toggleRegion = (id: MuscleRegionId) => setRegion((cur) => (cur === id ? null : id));
   const chip = (active: boolean) => cn('px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border transition-colors',
     active ? 'bg-[rgba(240,165,0,0.12)] text-[#f59e0b] border-[rgba(240,165,0,0.2)]' : 'bg-[rgba(230,213,184,0.03)] text-[#555] border-[rgba(230,213,184,0.04)]');
 
+  // Shared by List and Map modes so the count always matches the filter.
+  const listBody = (
+    <div className="space-y-1" aria-live="polite" aria-label="Filtered exercises">
+      {filtered.length === 0 ? (
+        <EmptyState icon={Search} message="No exercises match these filters." action="Clear filters" onAction={clearFilters} />
+      ) : filtered.map((e: Exercise) => (
+        <button key={e.id} onClick={() => onDetail(e.id)} className="w-full flex items-center justify-between gap-2 p-3 rounded-xl hover:bg-[rgba(230,213,184,0.04)] transition-colors text-left">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-[#EEE] flex items-center gap-1.5">
+              <span className="truncate">{e.name}</span>
+              {hasWikiContent(e) && (
+                <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[rgba(240,165,0,0.12)] text-[#f59e0b] text-[9px] font-bold uppercase tracking-wide">
+                  <BookOpen className="w-2.5 h-2.5" /> Guide
+                </span>
+              )}
+            </div>
+            <div className="text-[10px] text-[#555] capitalize">{e.muscle_group} · {EQUIPMENT_LABELS[resolveEquipmentTags(e)[0]]}</div>
+          </div>
+          <Plus className="w-4 h-4 text-[#f59e0b] shrink-0" />
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/60 backdrop-blur-sm fade-in" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#111111] border border-[rgba(230,213,184,0.08)] rounded-t-3xl lg:rounded-2xl shadow-2xl slide-up max-h-[85vh] flex flex-col max-lg:pb-safe" onClick={e => e.stopPropagation()}>
+      <div className={`w-full ${view === 'map' ? 'max-w-lg lg:max-w-3xl' : 'max-w-lg'} bg-[#111111] border border-[rgba(230,213,184,0.08)] rounded-t-3xl lg:rounded-2xl shadow-2xl slide-up max-h-[85vh] flex flex-col max-lg:pb-safe`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-[rgba(230,213,184,0.06)]">
           <h3 className="text-lg font-bold text-[#EEE]">Exercise Library</h3>
           <button onClick={onClose} aria-label="Close exercise library" className="w-8 h-8 rounded-full bg-[rgba(230,213,184,0.06)] flex items-center justify-center hover:bg-[rgba(230,213,184,0.1)]"><X className="w-4 h-4 text-[#777]" /></button>
         </div>
-        <div className="p-4 border-b border-[rgba(230,213,184,0.06)]">
+        <div className="px-4 pt-3">
+          <div className="flex gap-1 bg-[rgba(230,213,184,0.03)] rounded-xl p-1 border border-[rgba(230,213,184,0.04)]" role="tablist" aria-label="Library view">
+            {(['list', 'map'] as const).map(v => (
+              <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
+                className={cn('flex-1 py-2 rounded-lg text-xs font-semibold capitalize transition-all',
+                  view === v ? 'bg-[rgba(240,165,0,0.12)] text-[#f59e0b]' : 'text-[#555] hover:text-[#777]')}>
+                {v === 'map' ? 'Muscle map' : 'List'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {view === 'list' ? (
+          <>
+          <div className="p-4 border-b border-[rgba(230,213,184,0.06)]">
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#555]" />
             <label htmlFor="wiki-search" className="sr-only">Search exercises</label>
@@ -549,26 +594,42 @@ function ExerciseLibrary({ exercises, onDetail, onClose }: { exercises: Exercise
             ))}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
-          {filtered.length === 0 ? (
-            <EmptyState icon={Search} message="No exercises match these filters." action="Clear filters" onAction={clearFilters} />
-          ) : filtered.map((e: Exercise) => (
-            <button key={e.id} onClick={() => onDetail(e.id)} className="w-full flex items-center justify-between gap-2 p-3 rounded-xl hover:bg-[rgba(230,213,184,0.04)] transition-colors text-left">
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-[#EEE] flex items-center gap-1.5">
-                  <span className="truncate">{e.name}</span>
-                  {hasWikiContent(e) && (
-                    <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[rgba(240,165,0,0.12)] text-[#f59e0b] text-[9px] font-bold uppercase tracking-wide">
-                      <BookOpen className="w-2.5 h-2.5" /> Guide
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10px] text-[#555] capitalize">{e.muscle_group} · {EQUIPMENT_LABELS[resolveEquipmentTags(e)[0]]}</div>
-              </div>
-              <Plus className="w-4 h-4 text-[#f59e0b] shrink-0" />
-            </button>
-          ))}
+        <div className="flex-1 overflow-y-auto p-4">
+          {listBody}
         </div>
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4 lg:grid lg:grid-cols-[300px_1fr] lg:gap-5">
+            <div className="lg:sticky lg:top-0 self-start">
+              <div className="flex gap-1.5 justify-center mb-2" role="group" aria-label="Anatomy view">
+                {(['front', 'back'] as const).map(v => (
+                  <button key={v} onClick={() => setMapView(v)} aria-pressed={mapView === v} className={chip(mapView === v) + ' capitalize'}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <div className="mx-auto w-full max-w-[200px]">
+                {mapView === 'front'
+                  ? <MuscleMapFront selected={region} onSelect={toggleRegion} />
+                  : <MuscleMapBack selected={region} onSelect={toggleRegion} />}
+              </div>
+              <div className="mt-2 flex items-center justify-center gap-2 min-h-[32px]">
+                {region ? (
+                  <>
+                    <span className="px-2.5 py-1 rounded-lg bg-[rgba(240,165,0,0.12)] text-[#f59e0b] border border-[rgba(240,165,0,0.2)] text-xs font-semibold">{MUSCLE_REGIONS[region].label}</span>
+                    <span className="text-[11px] text-[#777]">{filtered.length} {filtered.length === 1 ? 'exercise' : 'exercises'}</span>
+                    <button onClick={clearRegion} aria-label="Clear muscle selection" className="py-2 px-1 text-[11px] font-semibold text-[#777] hover:text-[#f59e0b] underline underline-offset-2">Clear</button>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-[#555]">Tap a muscle to filter</span>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 lg:mt-0">
+              {listBody}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
