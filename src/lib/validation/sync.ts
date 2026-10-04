@@ -95,6 +95,7 @@ const syncSetPayload = z.object({
   duration_seconds: z.number().int().min(0).max(1000000).nullable().optional(),
   distance_meters: finiteNumber.min(0).max(1000000).nullable().optional(),
   is_warmup: z.boolean().nullable().optional(),
+  rpe: z.number().int().min(1).max(10).nullable().optional(),
 }).passthrough();
 
 const syncWorkoutExercisePayload = z.object({

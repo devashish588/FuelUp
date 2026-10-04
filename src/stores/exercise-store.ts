@@ -18,7 +18,7 @@ import { writeThrough } from './write-through';
 interface ExerciseState {
   exercises: Exercise[];
   workouts: Workout[];
-  activeWorkout: Workout | null;
+  activeWorkout: (Workout & { restTimers?: Record<string, { remaining: number; original: number; running: boolean; startTime?: number }> }) | null;
   ownerId: string | null;
   ready: boolean;
   lastError: string | null;
@@ -37,6 +37,11 @@ interface ExerciseState {
   getExerciseSessions: (exerciseId: string) => SessionSummary[];
   /** True when the active workout already contains this exercise (dup guard). */
   hasExerciseInWorkout: (exerciseId: string) => boolean;
+  /** Rest timer actions */
+  startRest: (workoutExerciseId: string, seconds: number) => void;
+  pauseRest: (workoutExerciseId: string) => void;
+  resumeRest: (workoutExerciseId: string) => void;
+  resetRest: (workoutExerciseId: string) => void;
   addCustomExercise: (exercise: Omit<Exercise, 'id' | 'created_at' | 'created_by'>) => Exercise;
 }
 
@@ -81,6 +86,7 @@ export const useExerciseStore = create<ExerciseState>()(
             calories_burned: null,
             notes: '',
             exercises: [],
+            restTimers: {},
             created_at: now,
           },
         });
@@ -106,6 +112,70 @@ export const useExerciseStore = create<ExerciseState>()(
       },
 
       cancelWorkout: () => set({ activeWorkout: null }),
+
+      startRest: (workoutExerciseId: string, seconds: number) => {
+        set((s) => {
+          if (!s.activeWorkout) return s;
+          // workoutExerciseId is already the ID we need for the restTimers map
+          return {
+            activeWorkout: {
+              ...s.activeWorkout,
+              restTimers: {
+                ...s.activeWorkout.restTimers,
+                [workoutExerciseId]: { remaining: seconds, original: seconds, running: true, startTime: Date.now() },
+              },
+            },
+          };
+        });
+      },
+
+      pauseRest: (workoutExerciseId: string) => {
+        set((s) => {
+          if (!s.activeWorkout || !s.activeWorkout.restTimers?.[workoutExerciseId]?.running) return s;
+          const timer = s.activeWorkout.restTimers[workoutExerciseId];
+          const elapsed = Date.now() - (timer.startTime ?? Date.now());
+          return {
+            activeWorkout: {
+              ...s.activeWorkout,
+              restTimers: {
+                ...s.activeWorkout.restTimers,
+                [workoutExerciseId]: { ...timer, remaining: Math.max(0, timer.remaining - elapsed), running: false, startTime: undefined },
+              },
+            },
+          };
+        });
+      },
+
+      resumeRest: (workoutExerciseId: string) => {
+        set((s) => {
+          if (!s.activeWorkout || !s.activeWorkout.restTimers?.[workoutExerciseId] || s.activeWorkout.restTimers[workoutExerciseId].running) return s;
+          return {
+            activeWorkout: {
+              ...s.activeWorkout,
+              restTimers: {
+                ...s.activeWorkout.restTimers,
+                [workoutExerciseId]: { ...s.activeWorkout.restTimers[workoutExerciseId], running: true, startTime: Date.now() },
+              },
+            },
+          };
+        });
+      },
+
+      resetRest: (workoutExerciseId: string) => {
+        set((s) => {
+          if (!s.activeWorkout || !s.activeWorkout.restTimers?.[workoutExerciseId]) return s;
+          const timer = s.activeWorkout.restTimers[workoutExerciseId];
+          return {
+            activeWorkout: {
+              ...s.activeWorkout,
+              restTimers: {
+                ...s.activeWorkout.restTimers,
+                [workoutExerciseId]: { remaining: timer.original, original: timer.original, running: false, startTime: undefined },
+              },
+            },
+          };
+        });
+      },
 
       addExerciseToWorkout: (exerciseId) => {
         set((s) => {

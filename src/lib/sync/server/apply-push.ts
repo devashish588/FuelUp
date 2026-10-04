@@ -505,7 +505,7 @@ async function applyWorkoutGraph(tx: Tx, userId: string, p: Record<string, unkno
     for (const s of sets) {
       const setId = str(s.id);
       if (!setId) continue;
-      await tx.exerciseSet.upsert({
+await tx.exerciseSet.upsert({
         where: { id: setId },
         create: {
           id: setId,
@@ -516,6 +516,7 @@ async function applyWorkoutGraph(tx: Tx, userId: string, p: Record<string, unkno
           durationSeconds: typeof s.duration_seconds === 'number' ? s.duration_seconds : null,
           distanceMeters: typeof s.distance_meters === 'number' ? s.distance_meters : null,
           isWarmup: s.is_warmup === true,
+          rpe: typeof s.rpe === 'number' ? s.rpe : null,
         },
         update: {
           setNumber: num(s.set_number, 1),
@@ -524,6 +525,7 @@ async function applyWorkoutGraph(tx: Tx, userId: string, p: Record<string, unkno
           durationSeconds: typeof s.duration_seconds === 'number' ? s.duration_seconds : null,
           distanceMeters: typeof s.distance_meters === 'number' ? s.distance_meters : null,
           isWarmup: s.is_warmup === true,
+          rpe: typeof s.rpe === 'number' ? s.rpe : null,
         },
       });
     }
