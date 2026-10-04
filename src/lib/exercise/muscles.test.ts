@@ -8,6 +8,7 @@ import {
   GROUP_REGION_EXPANSION,
   MUSCLE_REGION_IDS,
   MUSCLE_REGIONS,
+  MuscleRegionId,
   normalizeMuscleLabel,
   regionMatches,
   regionsForExercise,
@@ -88,7 +89,8 @@ describe('regionsForExercise + regionMatches', () => {
 
   it('falls back to group expansion for legacy rows', () => {
     const crossover = EXERCISE_DATABASE.find((e) => e.name === 'Cable Crossover')!;
-    expect(regionsForExercise(crossover)).toEqual({ primary: ['chest'], secondary: [] });
+    // Cable Crossover is now enriched, so it uses explicit metadata instead of group expansion
+    expect(regionsForExercise(crossover)).toEqual({ primary: ['chest'], secondary: ['front_delts'] });
     const tbar = EXERCISE_DATABASE.find((e) => e.name === 'T-Bar Row')!;
     expect(regionMatches(tbar, 'lats')).toBe(true);
     expect(regionMatches(tbar, 'quads')).toBe(false);
@@ -156,5 +158,78 @@ describe('regionsForExercise + regionMatches', () => {
     expect(regionMatches(byName('Leg Extension'), 'quads')).toBe(true);
     expect(regionMatches(byName('Bulgarian Split Squat'), 'glutes')).toBe(true);
     expect(regionMatches(byName('Front Squat'), 'calves')).toBe(false);
+  });
+
+  it('resolves the arms/core batch to defensible regions', () => {
+    const byName = (name: string) => EXERCISE_DATABASE.find((e) => e.name === name)!;
+    expect(regionsForExercise(byName('Barbell Curl')).primary).toEqual(['biceps']);
+    expect(regionsForExercise(byName('Hammer Curl')).primary).toEqual(['biceps']);
+    expect(regionsForExercise(byName('Hammer Curl')).secondary).toEqual(
+      expect.arrayContaining(['forearms'])
+    );
+    expect(regionsForExercise(byName('Skull Crushers')).primary).toEqual(['triceps']);
+    expect(regionsForExercise(byName('Tricep Pushdown')).primary).toEqual(['triceps']);
+    expect(regionsForExercise(byName('Ab Wheel Rollout')).primary).toEqual(['abs']);
+    expect(regionsForExercise(byName('Crunches')).primary).toEqual(['abs']);
+    expect(regionsForExercise(byName('Hanging Leg Raise')).primary).toEqual(['abs']);
+    expect(regionsForExercise(byName('Cable Woodchop')).primary).toEqual(['obliques']);
+    expect(regionsForExercise(byName('Russian Twist')).primary).toEqual(['obliques']);
+    expect(regionMatches(byName('Barbell Curl'), 'forearms')).toBe(true);
+    expect(regionMatches(byName('Skull Crushers'), 'biceps')).toBe(false);
+  });
+
+  it('leaves the previously enriched Plank and Dumbbell Curl behavior unchanged', () => {
+    const byName = (name: string) => EXERCISE_DATABASE.find((e) => e.name === name)!;
+    expect(regionsForExercise(byName('Plank')).primary).toEqual(
+      expect.arrayContaining(['abs'])
+    );
+    expect(regionsForExercise(byName('Dumbbell Curl')).primary).toEqual(['biceps']);
+    expect(regionMatches(byName('Plank'), 'glutes')).toBe(true);
+  });
+});
+
+describe('resolves the chest batch to defensible regions', () => {
+  const byName = (name: string) => EXERCISE_DATABASE.find((e) => e.name === name)!;
+  it('maps chest exercises to chest region', () => {
+    expect(regionsForExercise(byName('Incline Bench Press')).primary).toEqual(
+      expect.arrayContaining(['chest'])
+    );
+    expect(regionsForExercise(byName('Dumbbell Bench Press')).primary).toEqual(
+      expect.arrayContaining(['chest'])
+    );
+    expect(regionsForExercise(byName('Dumbbell Flyes')).primary).toEqual(['chest']);
+    expect(regionsForExercise(byName('Cable Crossover')).primary).toEqual(['chest']);
+    expect(regionsForExercise(byName('Chest Dips')).primary).toEqual(
+      expect.arrayContaining(['chest'])
+    );
+    // Push-ups already enriched in batch 0
+    expect(regionsForExercise(byName('Push-ups')).primary).toEqual(
+      expect.arrayContaining(['chest'])
+    );
+  });
+
+  it('maps secondary muscles correctly', () => {
+    expect(regionsForExercise(byName('Incline Bench Press')).secondary).toEqual(
+      expect.arrayContaining(['triceps'])
+    );
+    expect(regionsForExercise(byName('Dumbbell Bench Press')).secondary).toEqual(
+      expect.arrayContaining(['triceps'])
+    );
+    expect(regionsForExercise(byName('Chest Dips')).secondary).toEqual(
+      expect.arrayContaining(['triceps'])
+    );
+  });
+});
+
+describe('cardio exercises do not match any Muscle Map region', () => {
+  const byName = (name: string) => EXERCISE_DATABASE.find((e) => e.name === name)!;
+  const cardioNames = ['Treadmill Running', 'Stationary Bike', 'Rowing Machine', 'Elliptical', 'Jump Rope', 'Stair Climber'];
+  MUSCLE_REGION_IDS.forEach((id) => {
+    it(`cardio exercises do not match ${id}`, () => {
+      for (const name of cardioNames) {
+        const entry = EXERCISE_DATABASE.find((e) => e.name === name)!;
+        expect(regionMatches(entry, id as MuscleRegionId), `${name} vs ${id}`).toBe(false);
+      }
+    });
   });
 });

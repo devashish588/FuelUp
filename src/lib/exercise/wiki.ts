@@ -25,6 +25,7 @@ export const EQUIPMENT_LABELS: Record<EquipmentTag, string> = {
   dip_bars: 'Dip bars',
   bands: 'Bands',
   cardio_machine: 'Cardio machine',
+  jump_rope: 'Jump rope',
   other: 'Other',
 };
 
@@ -74,7 +75,9 @@ function tokenToTag(token: string): EquipmentTag {
   ) return 'cardio_machine';
   if (t.includes('machine')) return 'machine';
   if (t.includes('bodyweight') || t.includes('plate')) return 'bodyweight';
-  if (t.includes('ab wheel') || t.includes('jump rope') || t.includes('rope')) return 'other';
+  if (t.includes('ab wheel')) return 'other';
+  if (t.includes('jump rope')) return 'jump_rope';
+  if (t.includes('rope')) return 'other';
   return 'other';
 }
 

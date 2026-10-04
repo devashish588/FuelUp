@@ -59,6 +59,7 @@ export type EquipmentTag =
   | 'dip_bars'
   | 'bands'
   | 'cardio_machine'
+  | 'jump_rope'
   | 'other';
 
 /** Exercise Wiki (MVP): primary movement pattern of an exercise. */

@@ -78,26 +78,39 @@ describe('filterExercises', () => {
 });
 
 describe('wiki content + legacy-safe sections', () => {
-  it('marks the 27 enriched entries and only they carry content', () => {
+  it('marks the 49 enriched entries and only they carry content', () => {
     const enriched = EXERCISE_DATABASE.filter((e) =>
       hasWikiContent({ detailed_instructions: e.detailed_instructions, cues: e.cues })
     );
     expect(enriched.map((e) => e.name).sort()).toEqual(
       [
+        'Ab Wheel Rollout',
         'Arnold Press',
         'Barbell Bench Press',
+        'Barbell Curl',
         'Barbell Deadlift',
         'Barbell Row',
         'Barbell Squat',
         'Bulgarian Split Squat',
+        'Cable Crossover',
+        'Cable Woodchop',
         'Calf Raises',
+        'Chest Dips',
+        'Crunches',
         'Dumbbell Curl',
         'Dumbbell Row',
         'Dumbbell Shoulder Press',
+        'Dumbbell Bench Press',
+        'Dumbbell Flyes',
+        'Elliptical',
         'Face Pulls',
         'Front Raises',
         'Front Squat',
+        'Hammer Curl',
+        'Hanging Leg Raise',
         'Hip Thrust',
+        'Incline Bench Press',
+        'Jump Rope',
         'Lat Pulldown',
         'Lateral Raises',
         'Leg Curl',
@@ -105,12 +118,21 @@ describe('wiki content + legacy-safe sections', () => {
         'Leg Press',
         'Lunges',
         'Overhead Press',
+        'Overhead Tricep Extension',
         'Plank',
+        'Preacher Curl',
         'Pull-ups',
         'Push-ups',
         'Romanian Deadlift',
+        'Rowing Machine',
+        'Russian Twist',
         'Seated Cable Row',
+        'Skull Crushers',
+        'Stair Climber',
+        'Stationary Bike',
         'T-Bar Row',
+        'Tricep Pushdown',
+        'Treadmill Running',
       ].sort()
     );
   });
@@ -122,17 +144,6 @@ describe('wiki content + legacy-safe sections', () => {
     expect(sections.cues.length).toBeGreaterThan(0);
     expect(sections.primaryMuscles).toContain('Chest');
     expect(sections.equipmentTags).toEqual(['barbell', 'bench']);
-  });
-
-  it('degrades a legacy entry to its one-liner with empty extras', () => {
-    const legacy = EXERCISE_DATABASE.find((e) => e.name === 'Cable Crossover')!;
-    expect(hasWikiContent({ detailed_instructions: legacy.detailed_instructions, cues: legacy.cues })).toBe(false);
-    const sections = getDetailSections(legacy as never);
-    expect(sections.instructions).toEqual([legacy.instructions]);
-    expect(sections.cues).toEqual([]);
-    expect(sections.primaryMuscles).toEqual([]);
-    expect(sections.secondaryMuscles).toEqual([]);
-    expect(sections.equipmentTags).toEqual(['cable']);
   });
 
   it('handles a blank legacy instructions line without crashing', () => {
@@ -220,7 +231,7 @@ describe('region filter (Muscle Map v1)', () => {
 
 describe('enriched metadata validity (Batch 1)', () => {
   it('validates every enriched entry against the canonical vocabularies', () => {
-    const validTags = ['barbell', 'dumbbell', 'kettlebell', 'cable', 'machine', 'bench', 'rack', 'bodyweight', 'pullup_bar', 'dip_bars', 'bands', 'cardio_machine', 'other'];
+    const validTags = ['barbell', 'dumbbell', 'kettlebell', 'cable', 'machine', 'bench', 'rack', 'bodyweight', 'pullup_bar', 'dip_bars', 'bands', 'cardio_machine', 'jump_rope', 'other'];
     const validMovements = ['push', 'pull', 'hinge', 'squat', 'lunge', 'carry', 'rotation', 'core_stability', 'isolation', 'cardio'];
     const validDifficulties = ['beginner', 'intermediate', 'advanced'];
     for (const entry of EXERCISE_DATABASE) {
@@ -234,7 +245,10 @@ describe('enriched metadata validity (Batch 1)', () => {
       expect(validDifficulties, entry.name).toContain(entry.difficulty);
       expect((entry.detailed_instructions ?? []).length, entry.name).toBeGreaterThanOrEqual(3);
       expect((entry.cues ?? []).length, entry.name).toBeGreaterThanOrEqual(2);
-      expect((entry.primary_muscles ?? []).length, entry.name).toBeGreaterThan(0);
+      // Cardio exercises have empty primary_muscles by design; others must have at least one
+      if (entry.muscle_group !== 'cardio') {
+        expect((entry.primary_muscles ?? []).length, entry.name).toBeGreaterThan(0);
+      }
     }
   });
 
@@ -250,5 +264,64 @@ describe('enriched metadata validity (Batch 1)', () => {
     expect(pulldown.equipment).toBe('Cable Machine');
     expect(pulldown.instructions).toBe('Pull bar down to chest, squeeze lats.');
     expect(pulldown.muscle_group).toBe('back');
+  });
+});
+
+describe('enriched metadata validity (Batch 2: Chest + Cardio)', () => {
+  it('validates every enriched entry against the canonical vocabularies', () => {
+    const validTags = ['barbell', 'dumbbell', 'kettlebell', 'cable', 'machine', 'bench', 'rack', 'bodyweight', 'pullup_bar', 'dip_bars', 'bands', 'cardio_machine', 'jump_rope', 'other'];
+    const validMovements = ['push', 'pull', 'hinge', 'squat', 'lunge', 'carry', 'rotation', 'core_stability', 'isolation', 'cardio'];
+    const validDifficulties = ['beginner', 'intermediate', 'advanced'];
+    for (const entry of EXERCISE_DATABASE) {
+      const enriched =
+        (entry.detailed_instructions?.length ?? 0) > 0 || (entry.cues?.length ?? 0) > 0;
+      if (!enriched) continue;
+      for (const tag of entry.equipment_tags ?? []) {
+        expect(validTags, `${entry.name} tag`).toContain(tag);
+      }
+      expect(validMovements, entry.name).toContain(entry.movement);
+      expect(validDifficulties, entry.name).toContain(entry.difficulty);
+      expect((entry.detailed_instructions ?? []).length, entry.name).toBeGreaterThanOrEqual(3);
+      expect((entry.cues ?? []).length, entry.name).toBeGreaterThanOrEqual(2);
+      // Cardio exercises have empty primary_muscles by design; others must have at least one
+      if (entry.muscle_group !== 'cardio') {
+        expect((entry.primary_muscles ?? []).length, entry.name).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('cardio exercises have empty muscles and valid cardio metadata', () => {
+    const cardioNames = ['Treadmill Running', 'Stationary Bike', 'Rowing Machine', 'Elliptical', 'Jump Rope', 'Stair Climber'];
+    for (const name of cardioNames) {
+      const entry = EXERCISE_DATABASE.find((e) => e.name === name)!;
+      expect(entry.primary_muscles).toEqual([]);
+      expect(entry.secondary_muscles).toEqual([]);
+      expect(entry.movement).toBe('cardio');
+      expect(entry.difficulty).toBe('beginner');
+      // All cardio have cardio_machine except Jump Rope which has jump_rope
+      if (name === 'Jump Rope') {
+        expect(entry.equipment_tags).toContain('jump_rope');
+      } else {
+        expect(entry.equipment_tags).toContain('cardio_machine');
+      }
+    }
+  });
+
+  it('keeps legacy fields intact on every enriched entry', () => {
+    for (const entry of EXERCISE_DATABASE) {
+      expect(typeof entry.name, 'name').toBe('string');
+      expect(typeof entry.muscle_group, entry.name).toBe('string');
+      expect(typeof entry.equipment, entry.name).toBe('string');
+      expect(typeof entry.instructions, entry.name).toBe('string');
+      expect(typeof entry.is_custom, entry.name).toBe('boolean');
+    }
+    const incline = EXERCISE_DATABASE.find((e) => e.name === 'Incline Bench Press')!;
+    expect(incline.equipment).toBe('Barbell, Incline Bench');
+    expect(incline.instructions).toBe('Incline bench at 30-45°, press barbell from chest.');
+    expect(incline.muscle_group).toBe('chest');
+    const treadmill = EXERCISE_DATABASE.find((e) => e.name === 'Treadmill Running')!;
+    expect(treadmill.equipment).toBe('Treadmill');
+    expect(treadmill.instructions).toBe('Run at desired pace and incline.');
+    expect(treadmill.muscle_group).toBe('cardio');
   });
 });
